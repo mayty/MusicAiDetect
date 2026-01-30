@@ -1,0 +1,61 @@
+.artist-badge {
+
+  /* --- LAYOUT: Match the 'E' badge geometry --- */
+  display: inline-flex;       /* Allows perfect centering */
+  align-items: center;        /* Vertically center text */
+  justify-content: center;    /* Horizontally center text */
+  
+  height: 14px;               /* Fixed height to match the 'E' badge exactly */
+  box-sizing: border-box;
+  
+  /* --- TYPOGRAPHY --- */
+  font-size: 9px;             /* Reduced from 11px to match the 'E' icon scale */
+  font-weight: 700;           /* 900 was a bit too thick, 700 is cleaner */
+  font-family: Roboto, Arial, sans-serif;
+  line-height: 1;             /* Remove default text spacing */
+  
+  /* --- COLORS --- */
+  /* Use a semi-transparent white for that specific "badge" grey look */
+  background-color: rgba(255, 255, 255, 0.6); 
+  color: #000000;
+  
+  /* --- SPACING & SHAPE --- */
+  padding: 0 3px;             /* Tighter padding */
+  border-radius: 1px;
+  border: 1px solid;
+  
+  /* --- POSITIONING --- */
+  margin-right: 4px;          /* Space between [AI] and Name */
+  vertical-align: middle;
+  
+  /* Fine-tune vertical alignment relative to the text line */
+  transform: translateY(-1px); 
+  
+  /* --- RESETS --- */
+  text-indent: 0;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* --- STATE 1: AI (Solid Grey - The "E" Look) --- */
+.artist-badge.is-ai {
+  background-color: rgba(255, 255, 255, 0.6);
+  color: #000000;
+  border-color: transparent;
+}
+
+/* --- STATE 2: HUMAN (Hollow/Outlined) --- */
+.artist-badge.is-human {
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.7); /* Light grey text */
+  border-color: rgba(255, 255, 255, 0.4); /* Thin grey border */
+}
+
+/* --- STATE 3: UNKNOWN (Low Opacity / Minimal) --- */
+.artist-badge.is-unknown {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  border-color: transparent;
+  font-weight: 500; /* Thinner text for less emphasis */
+}
