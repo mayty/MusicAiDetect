@@ -1,7 +1,6 @@
 // Constants
-const DEV = false;
-const PROTOCOL = DEV ? 'http' : 'https';
-const API_HOST = DEV ? 'localhost:8080' : 'artist-check.com';
+const PROTOCOL = 'https';
+const API_HOST = 'artist-check.com';
 const API_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check/batch`;
 const BADGE_CLASS = 'artist-badge';
 const BADGE_QUERY = `.${BADGE_CLASS}`;
@@ -15,13 +14,7 @@ const BADGE_EXTRA_CLASS = {
   'ai': 'is-ai',
   'unknown': 'is-unknown'
 }
-const CONTAINER_SELECTORS = [
-  '.secondary-flex-columns yt-formatted-string.complex-string',  // List items ("Quick picks" style)
-  '.content-info-wrapper .subtitle yt-formatted-string.complex-string',  // Player
-  'ytmusic-two-row-item-renderer[has-circle-cropped-thumbnail] .title',  // Circle artist card ("Similar to" style)
-  'ytmusic-two-row-item-renderer .subtitle'  // Regular artist card ("Listen again" style)
-];
-const TARGET_LINK_SELECTOR = CONTAINER_SELECTORS.map(selector => `${selector} a[href*="channel/"]`).join(', ');
+const TARGET_LINK_SELECTOR = 'a[href*="channel/"]';
 
 
 // Global objects
@@ -29,7 +22,6 @@ const artistCache = new Map();
 let batchQueue = new Set();              // Queue for IDs waiting to be fetched
 const pendingResolvers = new Map();  // Map to find the resolving function for an ID
 let batchCheckTimeout = null;                 // Timer to debounce API requests
-let observerTimeout = null;                   // Timer to debounce DOM scan
 
 
 /**
@@ -137,14 +129,20 @@ function checkIsAiArtist(artistId) {
  * @return {string|null} The extracted artist ID if present and valid, otherwise null.
  */
 function getArtistIdFromLink(anchorElement) {
-  const href = anchorElement.getAttribute('href');
-  if (!href) return null;
+  try {
+    const url = new URL(anchorElement.href);
+    const parts = url.pathname.split('/').filter(Boolean); // Remove empty strings
+    let id = parts[parts.length - 1];
 
-  const parts = href.split('/');
-  const id = parts[parts.length - 1];
-  
-  if (id.startsWith('UC')) {
+    if (!id) return null;
+
+    if (id.startsWith('MPLA')) id = id.slice(4);
+
+    if (id.startsWith('UC')) {
       return id;
+    }
+  } catch (e) {
+    // Handle invalid URLs gracefully
   }
   return null;
 }
@@ -176,50 +174,90 @@ function addBadge(element, status) {
  * @param {HTMLElement} artistLink - The DOM element representing the artist link to process.
  * @return {void} A promise that resolves when the artist link has been handled.
  */
-function handleArtistLink(artistLink) {
-  // 1. Prevent Double Marking
-  if (artistLink.querySelector(BADGE_QUERY)) return;
+async function handleArtistLink(artistLink) {
+  if (artistLink.classList.contains('image-wrapper') || artistLink.querySelector('img, yt-img-shadow')) {
+    return;
+  }
 
-  // 2. Skip Image Links
-  if (artistLink.querySelector('img, yt-img-shadow')) return;
+  const currentArtistId = getArtistIdFromLink(artistLink);
+  if (!currentArtistId) return;
 
-  // 3. Extract ID and Check API
-  const artistId = getArtistIdFromLink(artistLink);
-  if (!artistId) return;
+  const lastCheckedId = artistLink.dataset.lastCheckedId;
+  const existingBadge = artistLink.querySelector(BADGE_QUERY);
 
-  checkIsAiArtist(artistId).then(status => addBadge(artistLink, status));
+  if (existingBadge) {
+    if (lastCheckedId === currentArtistId) {
+      return;
+    } else {
+      existingBadge.remove();
+    }
+  }
+
+  artistLink.dataset.lastCheckedId = currentArtistId;
+
+  const status = await checkIsAiArtist(currentArtistId);
+
+  // If the page changed, 'dataset.lastCheckedId' might now be different.
+  if (artistLink.dataset.lastCheckedId === currentArtistId) {
+    addBadge(artistLink, status);
+  }
 }
 
 
 /**
- * Scans various UI elements for artist links and retrieves their classification status from the API.
- * Assigns badges to visually mark different artist types.
+ * Scans an element node for target links and processes them.
  *
- * @return {void} This function does not return a value, but updates the DOM with artist badges.
+ * @param {Element} node - The DOM node that has changed and needs to be processed.
+ * @return {void} Does not return a value.
  */
-function scanAndMarkArtists() {
-  document.querySelectorAll(TARGET_LINK_SELECTOR).forEach(handleArtistLink);
+function handleElementNode(node) {
+  if (node.matches(TARGET_LINK_SELECTOR)) {
+    handleArtistLink(node);
+  } else if (node.firstElementChild){
+    node.querySelectorAll(TARGET_LINK_SELECTOR).forEach(handleArtistLink);
+  }
 }
 
+
+/**
+ * Scans a text node for a target link and processes it if found.
+ *
+ * @param {Text} node - The DOM node that has changed and needs to be processed.
+ * @return {void} Does not return a value.
+ */
+function handleTextNode(node) {
+  if (node.parentNode && node.parentNode.matches && node.parentNode.matches(TARGET_LINK_SELECTOR)) {
+    handleArtistLink(node.parentNode);
+  }
+}
+
+
 const observer = new MutationObserver((mutations) => {
-  const shouldScan = mutations.some(mutation =>
-    mutation.type === 'childList' &&
-    Array.from(mutation.addedNodes).some(node =>
-      node.nodeType === 1 && !node.classList.contains(BADGE_CLASS)
-    )
-  );
+  mutations.forEach((mutation) => {
+    if (mutation.type === 'attributes' && mutation.target.matches(TARGET_LINK_SELECTOR)) {
+      handleArtistLink(mutation.target);
+      return;
+    }
 
-  if (!shouldScan) return;
-
-  clearTimeout(observerTimeout);
-  observerTimeout = setTimeout(() => {
-    scanAndMarkArtists();
-  }, 500);
+    mutation.addedNodes.forEach((node) => {
+      switch (node.nodeType) {
+        case Node.ELEMENT_NODE:
+          handleElementNode(node);
+          break;
+        case Node.TEXT_NODE:
+          handleTextNode(node);
+          break;
+      }
+    });
+  });
 });
 
 observer.observe(document.body, {
   childList: true,
-  subtree: true
+  subtree: true,
+  attributes: true,
+  attributeFilter: ['href'],
 });
 
-scanAndMarkArtists();
+// Scan existing links on page load
+document.querySelectorAll(TARGET_LINK_SELECTOR).forEach(handleArtistLink);
