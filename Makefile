@@ -17,3 +17,7 @@ generate_icons:
 		--page-height 128 --page-width 128                 \
 		--left 16 --top 16                                 \
 		"icon_source/logo.svg" -o "listing/store_icon.png"
+
+
+package:
+	zip -r dist.zip dist
