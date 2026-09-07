@@ -3,6 +3,7 @@
 const PROTOCOL = 'https';
 const API_HOST = 'artist-check.com';
 const API_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check/batch`;
+const API_SINGLE_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check`;
 const BADGE_CLASS = 'artist-badge';
 const BADGE_QUERY = `.${BADGE_CLASS}`;
 const BADGE_TEXT = {
@@ -54,6 +55,33 @@ async function fetchBatchFromApi(artistIds) {
 
 
 /**
+ * Fetches classification status for a single artist ID from the API.
+ * * @param {string} artistId - The unique identifier of the artist to query.
+ * @returns {Promise<Object.<string, "human"|"ai"|"associated"|"unknown">>}
+ *   A promise resolving to a map of a single key (`artistId`) -> status.
+ * Notes:
+ * - The response body is `{ "status": "human" | "ai" | "associated" | "unknown" }`.
+ * @throws {Error} Throws an error if the API response is not ok (non-2xx status) or if the network request fails.
+ */
+async function fetchSingleFromApi(artistId) {
+  console.log(`[Single] Fetching ${artistId}...`);
+
+  const response = await fetch(
+    `${API_SINGLE_ENDPOINT}?artist_id=${encodeURIComponent(artistId)}`,
+    { method: 'GET' }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => response.statusText);
+    throw new Error(`Single API Failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();  // Expected: { "status": "human" | "ai" | "associated" | "unknown" }
+  return { [artistId]: data.status || 'unknown' };
+}
+
+
+/**
  * Processes a batch of IDs from the queue, fetches their statuses from an external API,
  * updates the memory cache with the results, and resolves pending promises for each ID.
  *
@@ -68,11 +96,20 @@ async function processBatch() {
 
   let requestSuccessful = true;
 
-  const results = await fetchBatchFromApi(idsToFetch).catch(err => {
-    console.error("Batch API Failed", err);
-    requestSuccessful = false;
-    return {};
-  });
+  let results;
+  if (idsToFetch.length === 1) {
+    results = await fetchSingleFromApi(idsToFetch[0]).catch(err => {
+      console.error("Single API Failed", err);
+      requestSuccessful = false;
+      return {};
+    });
+  } else {
+    results = await fetchBatchFromApi(idsToFetch).catch(err => {
+      console.error("Batch API Failed", err);
+      requestSuccessful = false;
+      return {};
+    });
+  }
 
   idsToFetch.forEach(id => {
     const status = results[id] || 'unknown'; 
