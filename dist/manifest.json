@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTM AI Artist Detector",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Marks AI artists on YouTube Music.",
   "content_scripts": [
     {
