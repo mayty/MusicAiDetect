@@ -1,3 +1,4 @@
+// This file has been edited with the assistance of an AI tool.
 // Constants
 const PROTOCOL = 'https';
 const API_HOST = 'artist-check.com';
@@ -7,12 +8,14 @@ const BADGE_QUERY = `.${BADGE_CLASS}`;
 const BADGE_TEXT = {
   'human': 'H',
   'ai': 'AI',
-  'unknown': '?'
+  'unknown': '?',
+  'associated': 'AI'   /* same icon/label as AI, distinguished by the dim-blue color */
 }
 const BADGE_EXTRA_CLASS = {
   'human': 'is-human',
   'ai': 'is-ai',
-  'unknown': 'is-unknown'
+  'unknown': 'is-unknown',
+  'associated': 'is-associated'
 }
 const TARGET_LINK_SELECTOR = 'a[href*="channel/"]';
 
@@ -27,7 +30,7 @@ let batchCheckTimeout = null;                 // Timer to debounce API requests
 /**
  * Fetches classification status for a batch of artist IDs from the API.
  * * @param {string[]} artistIds - An array of unique artist IDs to query.
- * @returns {Promise<Object.<string, "human"|"ai">>} A promise resolving to a map where keys are artist IDs and values are their classification.
+ * @returns {Promise<Object.<string, "human"|"ai"|"associated">>} A promise resolving to a map where keys are artist IDs and values are their classification.
  * Notes:
  * - The returned object only contains keys for artists found in the database; it may be a subset of the input `artistIds`.
  * @throws {Error} Throws an error if the API response is not ok (non-2xx status) or if the network request fails.
@@ -95,7 +98,7 @@ async function processBatch() {
  * The method uses caching and batching mechanisms to enhance performance.
  *
  * @param {string} artistId - The unique identifier of the artist to check.
- * @return {Promise<"human"|"ai"|"unknown">} A promise that resolves to `"human"`, `"ai"`, or `"unknown"` based on the artist's status.
+ * @return {Promise<"human"|"ai"|"unknown"|"associated">} A promise that resolves to `"human"`, `"ai"`, `"unknown"`, or `"associated"` based on the artist's status.
  */
 function checkIsAiArtist(artistId) {
   if (artistCache.has(artistId)) {
@@ -152,7 +155,7 @@ function getArtistIdFromLink(anchorElement) {
  * Marks the given element with a badge to indicate the artist type.
  *
  * @param {HTMLElement} element - The DOM element to be marked with the artist badge.
- * @param {"human"|"ai"|"unknown"} status - The status of the artist.
+ * @param {"human"|"ai"|"unknown"|"associated"} status - The status of the artist.
  * @return {void} This method does not return a value.
  */
 function addBadge(element, status) {

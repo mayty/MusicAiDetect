@@ -1,0 +1,12 @@
+# This file has been created with the assistance of an AI tool.
+
+# Normalize every text file to LF on checkout and in the repository.
+* text=auto eol=lf
+
+# Binary formats - never convert, never diff. (More-specific rules override the `*` rule above.)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ai binary
+*.zip binary
