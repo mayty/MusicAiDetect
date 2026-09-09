@@ -1,0 +1,25 @@
+# This file has been created with the assistance of an AI tool.
+name: Quality
+
+# The quality gate: runs on every pull request and on every push to master.
+# Configure the "Quality / quality" check as a required status check in branch
+# protection so a broken change cannot land on master.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run check

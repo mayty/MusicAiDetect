@@ -1,0 +1,49 @@
+# This file has been created with the assistance of an AI tool.
+name: Package
+
+# Builds the upload bundle. On a tag push (e.g. "0.3.0") it runs `make package`
+# into "{tag}.zip" and attaches it to a GitHub Release whose notes come from the
+# matching CHANGELOG.md section. On a pull request it produces a "pr-{n}.zip"
+# artifact for manual testing against the Chrome Web Store.
+on:
+  push:
+    tags:
+      - '[0-9]*'
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Build zip
+        run: |
+          make package
+          if [ "${{ github.event_name }}" = "push" ]; then
+            cp dist.zip "${{ github.ref_name }}.zip"
+          else
+            cp dist.zip "pr-${{ github.event.pull_request.number }}.zip"
+          fi
+
+      - name: Upload PR artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: extension-pr-${{ github.event.pull_request.number }}
+          path: "pr-${{ github.event.pull_request.number }}.zip"
+
+      - name: Create release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          node scripts/release-notes.js "$TAG" > "$TAG-notes.md"
+          gh release create "$TAG" "$TAG.zip" --title "$TAG" --notes-file "$TAG-notes.md"

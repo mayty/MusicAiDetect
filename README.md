@@ -1,23 +1,79 @@
 <!-- This file has been edited with the assistance of an AI tool. -->
-# Music AI Detector
+# YTM AI Artist Detector
 
-Source code for Google Chrome extension [YTM AI Artist Detector](https://chromewebstore.google.com/detail/aeemndkkpeaglfhiapkhekmnoiojodma)
+> Marks AI artists on YouTube Music and can auto-skip them.
 
-Marks AI artists on YouTube Music. Clicking the extension icon opens the auto-skip
-settings: pick which artist categories to skip and the extension presses Next for you
-whenever a matching track starts. Auto-skip is off by default, and while it is off the popup
-shows nothing but the toggle.
+A Manifest V3 Chrome extension that reads the artist credits in the YouTube Music
+player, queries the [artist-check.com](https://artist-check.com) database, and tags
+every credited artist with a badge: **H** (human), **AI** (AI artist), **?**
+(unknown), or a dim-blue **AI** (AI-associated).
 
-Turning it on reveals three collapsible sections — the categories to skip, the never-skip list
-and the skip history — each showing how many entries it holds. They open one at a time, and
-switching auto-skip on opens the category list for you.
+On top of the badges it can auto-skip: pick which categories to skip and the
+extension presses **Next** for you whenever a matching track starts. A "never skip"
+list lets you rescue collaborations — a listed artist vetoes the whole track even
+when another credit falls into a skipped category.
 
-The same popup lists every artist credited on a skipped track, most recent first, and lets you
-move any of them to a "never skip" list. A listed artist vetoes the whole track: it plays
-through even when another artist credited on it falls into a skipped category. That is why the
-whole line-up is listed and not only the artist that triggered the skip — when a track you want
-is skipped for one of its credits, the collaborator you list to rescue it is right there.
+Available on the [Chrome Web Store](https://chromewebstore.google.com/detail/aeemndkkpeaglfhiapkhekmnoiojodma).
 
-Artist names in both lists link to the artist's page on YouTube Music: a plain click opens it in
-a new tab, while ctrl-click (Cmd-click on macOS) or a middle-click opens it in the background and
-leaves the popup open, so several artists can be queued at once.
+## Features
+
+- **Artist badges.** Every credited artist — on a track, and on the channel pages
+  and search results behind it — is labelled with a badge showing its classification.
+- **Auto-skip.** Flip the toggle in the popup, choose the categories to skip, and the
+  extension advances the queue whenever a matching track starts. Off by default.
+- **Never-skip list.** A listed artist rescues any track they are credited on, even
+  when another co-credit matches a skipped category.
+- **Skip history.** Every artist credited on a skipped track is recorded (newest
+  first), so you can see — and promote — the co-credit who can rescue a collaboration.
+
+## How it works
+
+The popup and the page share one classification pipeline:
+
+1. The content script watches the player bar (and the rest of the page) for artist
+   links.
+2. `checkIsAiArtist` batches concurrent lookups and sends them to artist-check.com —
+   a single id goes to the scalar endpoint, several to the batch one.
+3. Artist badges are injected once a status comes back; auto-skip acts on the same
+   statuses when you've enabled it.
+
+Auto-skip is deliberately conservative. It requires two identical reads of a track
+before acting (so a transient title/byline mismatch is never skipped), never skips on
+an *uncached* "unknown" (which means the API couldn't be reached, not that the artist
+is unknown), and suspends after a run of consecutive skips.
+
+## Installation
+
+The packaged extension is on the Chrome Web Store. To load a local copy from source:
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (top right).
+3. **Load unpacked** and select the `dist/` folder.
+
+## Development
+
+There is no build step — the source is hand-maintained in `dist/`. After editing,
+reload the extension on `chrome://extensions`.
+
+| Command | What it does |
+|---|---|
+| `make generate_icons` | Regenerate the `dist/*.png` icons and the store icon from `icon_source/logo.svg` (needs `rsvg-convert`). |
+| `make package` | Zip `dist/` into `dist.zip` for upload. |
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow and the
+non-obvious design decisions, and [CLAUDE.md](CLAUDE.md) for agent/contributor notes.
+
+## Continuous integration
+
+GitHub Actions guards changes (`npm run lint`, `npm test`, `npm run check`) on every
+pull request and on pushes to `master`. A tag push (e.g. `0.3.0`) runs `make package`,
+attaches `{tag}.zip` to a release, and fills its notes from the matching `CHANGELOG.md`
+section; a pull request instead uploads a `pr-{n}.zip` artifact for manual testing.
+
+## Data
+
+Artist **ids** are sent to artist-check.com to look up their
+classification. Names only ever go into your browser's own `chrome.storage`: the
+auto-skip configuration and the never-skip list in the `sync` area, the skip history
+in `local`. Nothing about your listening history leaves the browser except the artist
+ids themselves.
