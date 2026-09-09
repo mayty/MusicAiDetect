@@ -9,7 +9,7 @@
 // Three values are persisted, under three keys:
 //   'autoskip'    (sync)  - the master toggle and the per-category picks
 //   'noskip'      (sync)  - the never-skip list, an artist id -> name map
-//   'skipHistory' (local) - the artists that caused a skip, most recent first
+//   'skipHistory' (local) - every artist credited on a skipped track, most recent first
 
 
 // Constants
@@ -397,9 +397,10 @@ function subscribeToSkipHistory(callback) {
 
 
 /**
- * Records artists that caused a skip, moving them to the front of the history.
+ * Records the artists credited on a skipped track, moving them to the front of the history.
  *
- * @param {Array.<{id: string, name: string, status: string}>} entries - The artists to record.
+ * @param {Array.<{id: string, name: string, status: string}>} entries - The artists to record,
+ *   in the order they should appear; the caller leads with the ones that caused the skip.
  * @return {Promise<void>} Resolves once the write has been attempted. Never rejects.
  * Notes:
  * - An upsert, not an append: an artist already in the history is moved to the front with a

@@ -432,7 +432,9 @@ function buildNoSkipRow(artistId, name) {
  * @param {{id: string, name: string, status: string, at: number}} entry - The history entry.
  * @return {DocumentFragment} The populated row, ready to append.
  * Notes:
- * - The badge shows why the track was skipped at the time. mergeSkipHistory drops entries with
+ * - The badge is this artist's own category at the time of the skip, not the reason the track
+ *   was skipped: a row can be a co-credit on a track another artist got skipped for, which is
+ *   exactly the row worth promoting to the never-skip list. mergeSkipHistory drops entries with
  *   an unknown status, which is what keeps BADGE_EXTRA_CLASS[status] from being undefined here.
  */
 function buildHistoryRow(entry) {

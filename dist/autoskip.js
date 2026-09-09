@@ -10,6 +10,10 @@
 //
 // An artist on the never-skip list vetoes the whole track: if any credited artist is listed,
 // the track plays even when another credited artist matches a selected category.
+//
+// A skip records the track's whole byline, not just the artists that matched. The veto above is
+// what makes that worth doing: the artist who can rescue a collaboration is precisely the one
+// who did *not* match, and the popup can only whitelist an artist it has a history row for.
 
 
 // Constants
@@ -285,18 +289,17 @@ async function evaluateAutoSkipTrack(snapshot, generation) {
   if (!isAutoSkipCurrent(snapshot, generation)) return;
   if (!autoSkipSettings.enabled) return;
 
-  const matched = [];
-  snapshot.artistIds.forEach((artistId, index) => {
-    if (!isAutoSkipStatus(statuses[index], artistId)) return;
-
-    matched.push({ id: artistId, name: snapshot.artistNames.get(artistId) || '', status: statuses[index] });
+  const credited = snapshot.artistIds.map((artistId, index) => {
+    return { id: artistId, name: snapshot.artistNames.get(artistId) || '', status: statuses[index] };
   });
+
+  const matched = credited.filter(artist => isAutoSkipStatus(artist.status, artist.id));
   if (matched.length === 0) {
     releaseAutoSkipStreak();   // a track was allowed to play - we are making progress
     return;
   }
 
-  requestAutoSkip(snapshot, matched);
+  requestAutoSkip(snapshot, matched, credited);
 }
 
 
@@ -305,17 +308,21 @@ async function evaluateAutoSkipTrack(snapshot, generation) {
  *
  * @param {{title: string, key: string}} snapshot - The track to skip.
  * @param {Array.<{id: string, name: string, status: string}>} matched - The artists that justified the skip.
+ * @param {Array.<{id: string, name: string, status: string}>} credited - Every artist credited on the track.
  * @return {void}
  * Notes:
- * - `matched` is built from the snapshot *before* the click, because reading the byline after
+ * - Both lists are built from the snapshot *before* the click, because reading the byline after
  *   dispatching it would race Polymer's update of the player bar.
+ * - The history records the whole byline but the log names only `matched`: the co-credited
+ *   artists are there for the user to whitelist, while the reason for the skip is what is worth
+ *   debugging.
  * - The history is written only once the click was actually dispatched, so a suppressed or
  *   impossible skip leaves no trace. A click that `verifyAutoSkip` later proves was a no-op
  *   (repeat-one, end of queue) does record an entry; moving the write into verifyAutoSkip is
  *   not an option, because commitAutoSkipTrack cancels that timeout in exactly the case where
  *   the skip *succeeded*. The unskippable latch caps this at one stray entry per track.
  */
-function requestAutoSkip(snapshot, matched) {
+function requestAutoSkip(snapshot, matched, credited) {
   if (autoSkipSuspended) return;
   if (autoSkipPendingKey !== null) return;                  // one skip in flight at a time
   if (autoSkipUnskippableKey === snapshot.key) return;       // "Next" already proved to be a no-op here
@@ -336,7 +343,9 @@ function requestAutoSkip(snapshot, matched) {
   console.log(AUTOSKIP_LOG_PREFIX, `Skipping "${snapshot.title}"`, matched.map(artist => artist.id));
 
   if (performAutoSkip()) {
-    recordSkippedArtists(matched);   // fire and forget - it never rejects
+    // mergeSkipHistory keeps the first occurrence of an id, so leading with `matched` puts the
+    // artists that caused the skip above their co-credits and drops their duplicate tail entries.
+    recordSkippedArtists(matched.concat(credited));   // fire and forget - it never rejects
     autoSkipVerifyTimeout = setTimeout(() => verifyAutoSkip(snapshot.key), AUTOSKIP_VERIFY_MS);
   } else {
     autoSkipUnskippableKey = snapshot.key;
