@@ -21,7 +21,15 @@ const POPUP_HISTORY_TEMPLATE_ID = 'history-row-template';
 const POPUP_HISTORY_LIST_ID = 'history-list';
 const POPUP_HISTORY_EMPTY_ID = 'history-empty';
 const POPUP_ERROR_ID = 'popup-error';
+const POPUP_SECTIONS_ID = 'popup-sections';
+const POPUP_CATEGORY_COUNT_ID = 'category-count';
+const POPUP_NOSKIP_COUNT_ID = 'noskip-count';
+const POPUP_HISTORY_COUNT_ID = 'history-count';
+const POPUP_CATEGORY_SECTION = 'categories';
 
+const POPUP_SECTION_SELECTOR = '.popup-section';
+const POPUP_SECTION_TOGGLE_SELECTOR = '.popup-section-toggle';
+const POPUP_SECTION_PANEL_SELECTOR = '.popup-section-panel';
 const POPUP_SETTINGS_CONTROL_SELECTOR = `#${POPUP_GROUP_ID}, .popup-row.is-master`;
 const POPUP_FULL_MESSAGE = 'The never-skip list is full. Remove an artist first.';
 const POPUP_SAVE_MESSAGE = 'Could not save. Your change was not applied.';
@@ -39,6 +47,10 @@ let popupNoSkipEmptyElement = null;
 let popupHistoryListElement = null;
 let popupHistoryEmptyElement = null;
 let popupErrorElement = null;
+let popupSectionsElement = null;
+let popupCategoryCountElement = null;
+let popupNoSkipCountElement = null;
+let popupHistoryCountElement = null;
 
 
 /**
@@ -76,12 +88,94 @@ function renderCategoryRows() {
 
 
 /**
- * Enables or dims the category rows to match the master toggle.
+ * Expands one section and collapses the other two.
+ *
+ * @param {string} sectionName - The data-section value to expand; '' collapses all of them.
+ * @return {void}
+ * Notes:
+ * - At most one section is open at a time because the popup is 300px wide and Chrome caps it
+ *   near 600px tall: two open lists would push the master toggle off screen, which is the same
+ *   reasoning that gives .popup-list its max-height.
+ * - Single-open by construction rather than by closing a remembered previous section, so the
+ *   popup cannot end up showing two open panels if one state update is ever missed.
+ * - The state lives in the DOM, for the same reason the category toggles do: aria-expanded is
+ *   what assistive technology reads and what rotates the caret in CSS, so it *is* the state and
+ *   there is no second copy to drift out of step.
+ * - Nothing is persisted. A popup lives for seconds and the next open is usually a different
+ *   intent, so every section starts collapsed from the hidden attributes in popup.html.
+ */
+function expandPopupSection(sectionName) {
+  popupSectionsElement.querySelectorAll(POPUP_SECTION_SELECTOR).forEach(section => {
+    const isExpanded = section.dataset.section === sectionName;
+
+    section.querySelector(POPUP_SECTION_TOGGLE_SELECTOR)
+      .setAttribute('aria-expanded', String(isExpanded));
+    section.querySelector(POPUP_SECTION_PANEL_SELECTOR).hidden = !isExpanded;
+  });
+}
+
+
+/**
+ * Opens the section a header button belongs to, or closes it when it is already open.
+ *
+ * @param {HTMLElement} toggle - The header button that was activated.
+ * @return {void}
+ * Notes:
+ * - Reads the current state back off aria-expanded rather than tracking it separately.
+ * - Clicking an open header closes it: one open section is the maximum, not the minimum.
+ */
+function togglePopupSection(toggle) {
+  const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+  const section = toggle.closest(POPUP_SECTION_SELECTOR);
+
+  expandPopupSection(isExpanded ? '' : section.dataset.section);
+}
+
+
+/**
+ * Writes the item count onto each section header.
  *
  * @return {void}
+ * Notes:
+ * - A collapsed section shows nothing at all, so the count is what tells the user whether
+ *   opening it is worth the click.
+ * - A zero renders as no text rather than as '0': the panel's own empty paragraph already says
+ *   it, and a row of zeroes across the headers is noise.
+ * - The history count applies the same never-skip filter renderArtistSections() does, so the
+ *   number always matches the rows behind the header.
+ */
+function updatePopupSectionCounts() {
+  const categoryCount = Array.from(popupCategoryToggles.values())
+    .filter(toggle => toggle.checked).length;
+  const noSkipCount = Object.keys(popupNoSkipList).length;
+  const historyCount = popupSkipHistory
+    .filter(entry => !isNoSkipArtist(popupNoSkipList, entry.id)).length;
+
+  popupCategoryCountElement.innerText = categoryCount === 0 ? '' : String(categoryCount);
+  popupNoSkipCountElement.innerText = noSkipCount === 0 ? '' : String(noSkipCount);
+  popupHistoryCountElement.innerText = historyCount === 0 ? '' : String(historyCount);
+}
+
+
+/**
+ * Shows or hides the settings sections to match the master toggle.
+ *
+ * @return {void}
+ * Notes:
+ * - Hides the sections rather than dimming them: with auto-skip off none of them is actionable,
+ *   and a 300px popup has no room to spend on three inert sections.
+ * - Hidden, never removed. readSettingsFromUi() reads the category checkboxes straight out of
+ *   the DOM, so detaching them would report every category as false and wipe the user's picks
+ *   on the next write. display:none leaves .checked alone, which is what makes this safe.
+ * - Collapses on the way out, so a later re-enable starts from a known state.
+ * - Does NOT expand anything on the way in. applySettings() calls this on every popup open,
+ *   where every section has to start collapsed; the auto-expand belongs to the user's own click
+ *   and lives in handleSettingsChange().
  */
 function updateMasterState() {
-  popupCategoryGroup.disabled = !popupMasterToggle.checked;
+  popupSectionsElement.hidden = !popupMasterToggle.checked;
+
+  if (!popupMasterToggle.checked) expandPopupSection('');
 }
 
 
@@ -98,6 +192,7 @@ function applySettings(settings) {
   });
 
   updateMasterState();
+  updatePopupSectionCounts();
 }
 
 
@@ -126,14 +221,24 @@ function readSettingsFromUi() {
  * - The listener is on document.body but writes the *settings* key unconditionally, so it has
  *   to establish first that the event came from a settings control. Without that guard, any
  *   form control added elsewhere in the popup would silently trigger a settings write.
- * - The master's dimming is applied synchronously, before the write, so it never waits on storage.
+ * - The master's own state is applied synchronously, before the write, so it never waits on storage.
  * - Category selections are kept when the master is switched off, so switching it back on
  *   restores the user's picks. isSkippedCategory() gates on both, so this is safe.
+ * - Switching auto-skip on opens "Skip these categories", because that is the choice which makes
+ *   the toggle do anything: enabled with no category ticked is a no-op. Switching it off closes
+ *   everything (updateMasterState), so the pair is symmetric.
+ * - That auto-expand lives here rather than in updateMasterState() because applySettings() calls
+ *   updateMasterState() on every popup open, where every section is meant to start collapsed.
  */
 function handleSettingsChange(event) {
   if (!event.target.closest(POPUP_SETTINGS_CONTROL_SELECTOR)) return;
 
-  if (event.target === popupMasterToggle) updateMasterState();
+  if (event.target === popupMasterToggle) {
+    updateMasterState();
+    if (popupMasterToggle.checked) expandPopupSection(POPUP_CATEGORY_SECTION);
+  }
+
+  updatePopupSectionCounts();
 
   saveSettings(readSettingsFromUi()).then(saved => {
     if (!saved) console.error('Auto-skip settings were not saved');
@@ -302,6 +407,7 @@ function renderArtistSections() {
     .map(buildHistoryRow);
   replacePopupRows(popupHistoryListElement, popupHistoryEmptyElement, historyRows);
 
+  updatePopupSectionCounts();
   restorePopupFocus(focusToken);
 }
 
@@ -400,6 +506,9 @@ async function clearSkipHistory() {
  * Notes:
  * - Matching on [data-action] rather than on a class keeps this handler from swallowing the
  *   clicks that reach the category rows, which are <label>s wrapping their checkbox.
+ * - The section headers ride this same switch instead of taking a listener of their own. They
+ *   are <button>s outside any .popup-row, so the artistId above is empty for them, exactly as
+ *   it already is for clear-history.
  */
 function handlePopupClick(event) {
   const action = event.target.closest('[data-action]');
@@ -418,6 +527,9 @@ function handlePopupClick(event) {
     case 'clear-history':
       clearSkipHistory();
       break;
+    case 'toggle-section':
+      togglePopupSection(action);
+      break;
   }
 }
 
@@ -434,6 +546,9 @@ function handlePopupClick(event) {
  *   skips a track, and the popup only ever writes it by clearing, where an echo is idempotent.
  * - The three loads run together because .popup.is-loading hides the whole popup until they all
  *   land, so awaiting them one after another would only be slower.
+ * - The accordion adds no listener of its own: the header buttons are [data-action] targets, so
+ *   the delegated click handler already routes them, and the sections start collapsed from the
+ *   hidden attributes in popup.html rather than from a first render pass.
  */
 async function initializePopup() {
   popupMasterToggle = document.getElementById(POPUP_MASTER_ID);
@@ -443,6 +558,10 @@ async function initializePopup() {
   popupHistoryListElement = document.getElementById(POPUP_HISTORY_LIST_ID);
   popupHistoryEmptyElement = document.getElementById(POPUP_HISTORY_EMPTY_ID);
   popupErrorElement = document.getElementById(POPUP_ERROR_ID);
+  popupSectionsElement = document.getElementById(POPUP_SECTIONS_ID);
+  popupCategoryCountElement = document.getElementById(POPUP_CATEGORY_COUNT_ID);
+  popupNoSkipCountElement = document.getElementById(POPUP_NOSKIP_COUNT_ID);
+  popupHistoryCountElement = document.getElementById(POPUP_HISTORY_COUNT_ID);
 
   renderCategoryRows();
 

@@ -21,25 +21,62 @@
       <input class="popup-switch" type="checkbox" id="autoskip-enabled" role="switch" aria-describedby="autoskip-hint">
     </label>
 
-    <fieldset class="popup-group" id="category-group">
-      <legend class="popup-group-title">Skip these categories</legend>
-      <!-- popup.js clones the template below once per CATEGORY_ORDER entry -->
-    </fieldset>
+    <!-- Hidden wholesale while the master toggle is off: with auto-skip disabled none of it is
+         actionable, so the popup collapses to the toggle it exists for. Neither this element nor
+         a panel below may be given a display in CSS - one would out-specify the UA's
+         [hidden] { display: none } and the collapse would silently stop collapsing. -->
+    <div class="popup-sections" id="popup-sections" hidden>
 
-    <!-- Both sections sit outside the fieldset above: its :disabled rules cascade to every
-         descendant, and these lists stay usable while the master toggle is off. -->
-    <section class="popup-group">
-      <h2 class="popup-group-title">Never skip</h2>
-      <p class="popup-empty" id="noskip-empty">No artists yet. Add them from the list below.</p>
-      <div class="popup-list" id="noskip-list"></div>
-    </section>
+      <section class="popup-section" data-section="categories">
+        <h2 class="popup-section-heading">
+          <button class="popup-section-toggle" type="button" id="category-toggle"
+                  data-action="toggle-section" aria-expanded="false" aria-controls="category-panel">
+            <span class="popup-section-caret" aria-hidden="true"></span>
+            <span class="popup-section-label">Skip these categories</span>
+            <span class="popup-section-count" id="category-count"></span>
+          </button>
+        </h2>
+        <div class="popup-section-panel" id="category-panel" hidden>
+          <!-- No <legend>: the header button above names the group through aria-labelledby, so
+               the same three words are not read twice. popup.js clones the template below once
+               per CATEGORY_ORDER entry. -->
+          <fieldset class="popup-group" id="category-group" aria-labelledby="category-toggle">
+          </fieldset>
+        </div>
+      </section>
 
-    <section class="popup-group">
-      <h2 class="popup-group-title">Recently skipped</h2>
-      <p class="popup-empty" id="history-empty">Nothing skipped yet.</p>
-      <div class="popup-list" id="history-list"></div>
-      <button class="popup-button" type="button" data-action="clear-history">Clear history</button>
-    </section>
+      <section class="popup-section" data-section="noskip">
+        <h2 class="popup-section-heading">
+          <button class="popup-section-toggle" type="button"
+                  data-action="toggle-section" aria-expanded="false" aria-controls="noskip-panel">
+            <span class="popup-section-caret" aria-hidden="true"></span>
+            <span class="popup-section-label">Never skip</span>
+            <span class="popup-section-count" id="noskip-count"></span>
+          </button>
+        </h2>
+        <div class="popup-section-panel" id="noskip-panel" hidden>
+          <p class="popup-empty" id="noskip-empty">No artists yet. Add them from Recently skipped.</p>
+          <div class="popup-list" id="noskip-list"></div>
+        </div>
+      </section>
+
+      <section class="popup-section" data-section="history">
+        <h2 class="popup-section-heading">
+          <button class="popup-section-toggle" type="button"
+                  data-action="toggle-section" aria-expanded="false" aria-controls="history-panel">
+            <span class="popup-section-caret" aria-hidden="true"></span>
+            <span class="popup-section-label">Recently skipped</span>
+            <span class="popup-section-count" id="history-count"></span>
+          </button>
+        </h2>
+        <div class="popup-section-panel" id="history-panel" hidden>
+          <p class="popup-empty" id="history-empty">Nothing skipped yet.</p>
+          <div class="popup-list" id="history-list"></div>
+          <button class="popup-button" type="button" data-action="clear-history">Clear history</button>
+        </div>
+      </section>
+
+    </div>
 
     <p class="popup-error" id="popup-error" role="status" hidden></p>
 
