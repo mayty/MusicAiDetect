@@ -4,20 +4,7 @@ const PROTOCOL = 'https';
 const API_HOST = 'artist-check.com';
 const API_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check/batch`;
 const API_SINGLE_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check`;
-const BADGE_CLASS = 'artist-badge';
-const BADGE_QUERY = `.${BADGE_CLASS}`;
-const BADGE_TEXT = {
-  'human': 'H',
-  'ai': 'AI',
-  'unknown': '?',
-  'associated': 'AI'   /* same icon/label as AI, distinguished by the dim-blue color */
-}
-const BADGE_EXTRA_CLASS = {
-  'human': 'is-human',
-  'ai': 'is-ai',
-  'unknown': 'is-unknown',
-  'associated': 'is-associated'
-}
+const BADGE_QUERY = `.${BADGE_CLASS}`;  // BADGE_CLASS, BADGE_TEXT and BADGE_EXTRA_CLASS come from settings.js
 const TARGET_LINK_SELECTOR = 'a[href*="channel/"]';
 
 

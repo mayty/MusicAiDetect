@@ -1,0 +1,42 @@
+<!-- This file has been created with the assistance of an AI tool. -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>YTM AI Artist Detector</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body class="popup is-loading">
+
+    <header class="popup-header">
+      <h1 class="popup-title">Auto-skip</h1>
+      <p class="popup-hint" id="autoskip-hint">
+        Presses Next automatically when a track's artist is in a selected category.
+      </p>
+    </header>
+
+    <label class="popup-row is-master">
+      <span class="popup-row-label">Enable auto-skip</span>
+      <input class="popup-switch" type="checkbox" id="autoskip-enabled" role="switch" aria-describedby="autoskip-hint">
+    </label>
+
+    <fieldset class="popup-group" id="category-group">
+      <legend class="popup-group-title">Skip these categories</legend>
+      <!-- popup.js clones the template below once per CATEGORY_ORDER entry -->
+    </fieldset>
+
+    <template id="category-row-template">
+      <label class="popup-row">
+        <span class="popup-row-badge" aria-hidden="true">
+          <span class="artist-badge"></span>
+        </span>
+        <span class="popup-row-label"></span>
+        <input class="popup-switch" type="checkbox" role="switch">
+      </label>
+    </template>
+
+    <script src="settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,166 @@
+/* This file has been created with the assistance of an AI tool. */
+
+/* --- PAGE --- */
+/* Dark by design: the .artist-badge colors in styles.css are all white-alpha, so the
+   Human badge would be white-on-white and Unknown near-invisible on a light surface. */
+* {
+  box-sizing: border-box;
+}
+
+.popup {
+  width: 300px;
+  min-height: 300px;          /* keeps the window from resizing as the rows are generated */
+  margin: 0;
+  padding: 14px;
+
+  background-color: #030303;  /* YouTube Music's body black */
+  color: #ffffff;
+
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Settings load asynchronously; hiding until the first paint avoids every switch
+   flashing from off to its stored position. */
+.popup.is-loading {
+  visibility: hidden;
+}
+
+/* --- HEADER --- */
+.popup-header {
+  margin-bottom: 12px;
+}
+
+.popup-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.popup-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+/* --- ROWS --- */
+.popup-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.popup-row:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.popup-row.is-master {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px 4px 0 0;
+  font-weight: 500;
+}
+
+/* Fixed-width cell so the labels line up despite 'AI', 'H' and '?' having different widths. */
+.popup-row-badge {
+  flex: 0 0 30px;
+  display: flex;
+  justify-content: flex-start;
+  cursor: inherit;              /* .artist-badge sets cursor: default, which fights the row */
+}
+
+.popup-row-badge .artist-badge {
+  margin-right: 0;              /* the row provides its own spacing */
+  cursor: inherit;
+}
+
+.popup-row-label {
+  flex: 1 1 auto;
+}
+
+/* --- CATEGORY GROUP --- */
+.popup-group {
+  display: block;               /* flex on a fieldset has Chromium layout quirks */
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.popup-group-title {
+  padding: 0 8px;
+  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* fieldset[disabled] already blocks activation and drops the inputs out of the tab
+   order, so this only has to communicate the state. */
+.popup-group:disabled {
+  opacity: 0.45;
+}
+
+.popup-group:disabled .popup-row {
+  cursor: default;
+}
+
+.popup-group:disabled .popup-row:hover {
+  background-color: transparent;
+}
+
+/* --- SWITCH --- */
+/* Styling the checkbox itself rather than hiding it behind a span keeps native
+   focusability and the native focus ring - hiding the input with display:none is the
+   classic way to silently break keyboard operation. */
+.popup-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0 0 0 auto;
+  appearance: none;
+
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  cursor: inherit;
+  transition: background-color 120ms ease;
+}
+
+.popup-switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 120ms ease;
+}
+
+.popup-switch:checked {
+  background-color: rgba(139, 92, 246, 0.9);   /* the ai-purple accent from styles.css */
+}
+
+.popup-switch:checked::before {
+  transform: translateX(14px);
+}
+
+.popup-switch:focus-visible {
+  outline: 2px solid #ffffff;   /* appearance:none discards the UA ring, and it must show on black */
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-switch,
+  .popup-switch::before {
+    transition: none;
+  }
+}
