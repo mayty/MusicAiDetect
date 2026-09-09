@@ -14,6 +14,7 @@
 
 // Constants
 const BADGE_CLASS = 'artist-badge';
+const BADGE_QUERY = `.${BADGE_CLASS}`;
 const BADGE_TEXT = {
   'human': 'H',
   'ai': 'AI',
@@ -58,25 +59,6 @@ let skipHistoryWriteChain = Promise.resolve();   // serializes read-modify-write
 
 
 /**
- * Resolves a storage area name to the area object.
- *
- * @param {"sync"|"local"} areaName - The storage area to use.
- * @return {chrome.storage.StorageArea} The area object.
- * @throws {Error} Throws when the name does not resolve to a usable area.
- * Notes:
- * - Throwing here rather than returning undefined keeps a typo'd area name inside the
- *   try/catch of loadStoredValue, which turns it into "resolve to defaults" instead of an
- *   unhandled TypeError on the playback hot path.
- */
-function getStorageArea(areaName) {
-  const area = chrome.storage[areaName];
-  if (!area || typeof area.get !== 'function') throw new Error(`Unknown storage area '${areaName}'`);
-
-  return area;
-}
-
-
-/**
  * Reads one key from one storage area and normalizes it.
  *
  * @param {"sync"|"local"} areaName - The storage area to read from.
@@ -90,7 +72,7 @@ function getStorageArea(areaName) {
  */
 async function loadStoredValue(areaName, key, merge) {
   try {
-    const stored = await getStorageArea(areaName).get(key);
+    const stored = await chrome.storage[areaName].get(key);
     return merge(stored[key]);
   } catch (error) {
     console.error(`Failed to read '${key}'`, error);
@@ -112,7 +94,7 @@ async function loadStoredValue(areaName, key, merge) {
  */
 async function saveStoredValue(areaName, key, value) {
   try {
-    await getStorageArea(areaName).set({ [key]: value });
+    await chrome.storage[areaName].set({ [key]: value });
     return true;
   } catch (error) {
     console.error(`Failed to save '${key}'`, error);
@@ -172,13 +154,10 @@ function measureStoredSize(key, value) {
 
 
 /**
- * Coerces an artist name into a safe, bounded string.
+ * Coerces an artist name into a trimmed string of at most ARTIST_NAME_LIMIT characters.
  *
- * @param {*} raw - The value to coerce; may be of any type, including undefined.
- * @return {string} A trimmed name of at most ARTIST_NAME_LIMIT characters, possibly empty.
- * Notes:
- * - An empty result is legitimate: the player-bar byline populates asynchronously, so a name
- *   can genuinely be unknown at the moment a skip is recorded. Callers render `name || id`.
+ * An empty result is legitimate: the player-bar byline populates asynchronously, so a name can
+ * genuinely be unknown at the moment a skip is recorded. Callers render `name || id`.
  */
 function clampArtistName(raw) {
   if (typeof raw !== 'string') return '';
@@ -188,13 +167,8 @@ function clampArtistName(raw) {
 
 
 /**
- * Tests whether a value looks like a YouTube channel id.
- *
- * @param {*} raw - The value to test.
- * @return {boolean} True for a 'UC'-prefixed string.
- * Notes:
- * - Matches the acceptance rule in getArtistIdFromLink, so a stored id can only be one this
- *   extension could have produced.
+ * Tests whether a value looks like a YouTube channel id. Matches the acceptance rule in
+ * getArtistIdFromLink, so a stored id can only be one this extension could have produced.
  */
 function isArtistId(raw) {
   return typeof raw === 'string' && raw.startsWith('UC');
@@ -232,8 +206,7 @@ function mergeSettings(raw) {
  * @return {Object.<string, string>} A map of artist id -> display name.
  * Notes:
  * - A map rather than a list of objects: membership is the hot-path operation, it de-duplicates
- *   for free, and it costs ~25% fewer bytes against the 8KB sync item quota. Display order is
- *   derived in the popup, not stored.
+ *   for free, and it costs ~25% fewer bytes against the 8KB sync item quota.
  * - Names are stored, not just ids, because this key syncs across devices and may name artists
  *   this device has never skipped and therefore cannot look up in its history.
  * - Capped on read as well as on write, so a hand-edited store cannot produce an endless render.
@@ -266,12 +239,12 @@ function mergeSkipHistory(raw) {
 
   const history = [];
   const seenIds = new Set();
-  source.forEach(rawEntry => {
-    if (history.length >= SKIP_HISTORY_LIMIT) return;
+  for (const rawEntry of source) {
+    if (history.length >= SKIP_HISTORY_LIMIT) break;
 
     const entry = (rawEntry && typeof rawEntry === 'object') ? rawEntry : {};
-    if (!isArtistId(entry.id) || seenIds.has(entry.id)) return;
-    if (!Object.prototype.hasOwnProperty.call(CATEGORY_LABEL, entry.status)) return;
+    if (!isArtistId(entry.id) || seenIds.has(entry.id)) continue;
+    if (!CATEGORY_ORDER.includes(entry.status)) continue;
 
     seenIds.add(entry.id);
     history.push({
@@ -280,117 +253,73 @@ function mergeSkipHistory(raw) {
       status: entry.status,
       at: Number.isFinite(entry.at) ? entry.at : 0
     });
-  });
+  }
 
   return history;
 }
 
 
-/**
- * Reads the auto-skip settings from chrome.storage.sync.
- *
- * @return {Promise<{enabled: boolean, categories: Object.<string, boolean>}>}
- *   A promise resolving to normalized settings. Never rejects.
- */
+/** Reads the auto-skip settings from chrome.storage.sync. Never rejects. */
 function loadSettings() {
   return loadStoredValue('sync', SETTINGS_KEY, mergeSettings);
 }
 
 
-/**
- * Writes the auto-skip settings to chrome.storage.sync under SETTINGS_KEY.
- *
- * @param {{enabled: boolean, categories: Object.<string, boolean>}} settings - The settings to persist.
- * @return {Promise<boolean>} A promise resolving to `true` on success, `false` if the write failed.
- * Notes:
- * - The value is normalized before writing, so a partial object is safe to pass.
- */
+/** Writes the auto-skip settings, normalizing first so a partial object is safe to pass. */
 function saveSettings(settings) {
   return saveStoredValue('sync', SETTINGS_KEY, mergeSettings(settings));
 }
 
 
-/**
- * Subscribes to external changes of the auto-skip settings.
- *
- * @param {function({enabled: boolean, categories: Object.<string, boolean>}): void} callback -
- *   Invoked with normalized settings whenever the stored value changes or is removed.
- * @return {function(): void} A function that removes the listener.
- */
+/** Subscribes to external changes of the auto-skip settings. Returns an unsubscribe function. */
 function subscribeToSettings(callback) {
   return subscribeToStoredValue('sync', SETTINGS_KEY, mergeSettings, callback);
 }
 
 
-/**
- * Reads the never-skip list from chrome.storage.sync.
- *
- * @return {Promise<Object.<string, string>>} A promise resolving to an artist id -> name map. Never rejects.
- */
+/** Reads the never-skip list from chrome.storage.sync. Never rejects. */
 function loadNoSkipList() {
   return loadStoredValue('sync', NOSKIP_KEY, mergeNoSkipList);
 }
 
 
 /**
- * Writes the never-skip list to chrome.storage.sync under NOSKIP_KEY.
+ * Writes the never-skip list to chrome.storage.sync.
  *
- * @param {Object.<string, string>} noSkipList - The list to persist.
- * @return {Promise<boolean>} A promise resolving to `true` on success, `false` if the write failed.
- * Notes:
- * - A `false` here most likely means QUOTA_BYTES_PER_ITEM was exceeded. Callers should surface
- *   that to the user rather than swallow it - unlike a toggle, a refused add leaves no visible
- *   trace that the click did nothing.
+ * A `false` return most likely means QUOTA_BYTES_PER_ITEM was exceeded. Callers should surface
+ * that to the user rather than swallow it - unlike a toggle, a refused add leaves no visible
+ * trace that the click did nothing.
  */
 function saveNoSkipList(noSkipList) {
   return saveStoredValue('sync', NOSKIP_KEY, mergeNoSkipList(noSkipList));
 }
 
 
-/**
- * Subscribes to external changes of the never-skip list.
- *
- * @param {function(Object.<string, string>): void} callback - Invoked with the normalized list on every change.
- * @return {function(): void} A function that removes the listener.
- */
+/** Subscribes to external changes of the never-skip list. Returns an unsubscribe function. */
 function subscribeToNoSkipList(callback) {
   return subscribeToStoredValue('sync', NOSKIP_KEY, mergeNoSkipList, callback);
 }
 
 
-/**
- * Reads the skip history from chrome.storage.local.
- *
- * @return {Promise<Array.<{id: string, name: string, status: string, at: number}>>}
- *   A promise resolving to the history, most recent first. Never rejects.
- */
+/** Reads the skip history from chrome.storage.local. Never rejects. */
 function loadSkipHistory() {
   return loadStoredValue('local', SKIP_HISTORY_KEY, mergeSkipHistory);
 }
 
 
 /**
- * Writes the skip history to chrome.storage.local under SKIP_HISTORY_KEY.
+ * Writes the skip history to chrome.storage.local.
  *
- * @param {Array.<{id: string, name: string, status: string, at: number}>} history - The history to persist.
- * @return {Promise<boolean>} A promise resolving to `true` on success, `false` if the write failed.
- * Notes:
- * - Normalizing on write is what enforces SKIP_HISTORY_LIMIT, so callers may pass a longer array.
- * - Deliberately in `local`: the history is per-device, it grows without a useful bound, and
- *   sync's write-rate quota is shared with the settings key.
+ * Normalizing on write is what enforces SKIP_HISTORY_LIMIT, so callers may pass a longer array.
+ * Deliberately in `local`: the history is per-device, it grows without a useful bound, and
+ * sync's write-rate quota is shared with the settings key.
  */
 function saveSkipHistory(history) {
   return saveStoredValue('local', SKIP_HISTORY_KEY, mergeSkipHistory(history));
 }
 
 
-/**
- * Subscribes to external changes of the skip history.
- *
- * @param {function(Array.<{id: string, name: string, status: string, at: number}>): void} callback -
- *   Invoked with the normalized history on every change.
- * @return {function(): void} A function that removes the listener.
- */
+/** Subscribes to external changes of the skip history. Returns an unsubscribe function. */
 function subscribeToSkipHistory(callback) {
   return subscribeToStoredValue('local', SKIP_HISTORY_KEY, mergeSkipHistory, callback);
 }
@@ -436,27 +365,17 @@ function recordSkippedArtists(entries) {
 }
 
 
-/**
- * Determines whether a given artist status should be auto-skipped under the given settings.
- *
- * @param {{enabled: boolean, categories: Object.<string, boolean>}} settings - The current settings.
- * @param {"human"|"ai"|"unknown"|"associated"} status - The artist status to test.
- * @return {boolean} True when the master toggle is on and the category is selected.
- */
+/** True when the master toggle is on and `status` is one of the selected categories. */
 function isSkippedCategory(settings, status) {
   return settings.enabled === true && settings.categories[status] === true;
 }
 
 
 /**
- * Determines whether an artist is on the never-skip list.
+ * True when an artist is on the never-skip list.
  *
- * @param {Object.<string, string>} noSkipList - The current never-skip list.
- * @param {string} artistId - The artist to test.
- * @return {boolean} True when the artist is listed.
- * Notes:
- * - Uses hasOwnProperty rather than a truth test, so an artist stored with an empty name -
- *   which happens when the byline had not populated when they were recorded - still counts.
+ * Uses hasOwnProperty rather than a truth test, so an artist stored with an empty name - which
+ * happens when the byline had not populated when they were recorded - still counts.
  */
 function isNoSkipArtist(noSkipList, artistId) {
   return Object.prototype.hasOwnProperty.call(noSkipList, artistId);

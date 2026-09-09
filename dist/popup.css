@@ -7,9 +7,6 @@
   box-sizing: border-box;
 }
 
-/* No min-height: the category rows are generated into a collapsed panel and contribute no
-   height, so there is nothing left to steady - and with auto-skip off the popup is barely
-   130px of content, which a floor would pad out with empty black. */
 .popup {
   width: 300px;
   margin: 0;
@@ -60,9 +57,8 @@
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* The divider that used to sit under this row now belongs to .popup-sections: the row survives
-   the master toggle going off and the sections do not, so a border here would be a rule drawn
-   under nothing. */
+/* The divider belongs to .popup-sections, not here: this row survives the master toggle going
+   off and the sections do not, so a border here would be a rule drawn under nothing. */
 .popup-row.is-master {
   margin-bottom: 12px;
   font-weight: 500;
@@ -91,11 +87,9 @@
   white-space: nowrap;
 }
 
-/* Only the two artist templates use the anchor form of the label; the category and master rows
-   keep a plain <span>, and none of this reaches them. The name stays in the row's own white with
-   no resting underline: a column of blue underlined names would be the loudest thing in a 300px
-   popup. Declaring color here settles :visited too - any author declaration beats the UA sheet,
-   so a channel the user has already opened does not come back purple. */
+/* Only the two artist templates use the anchor form of the label. Declaring color here settles
+   :visited too - any author declaration beats the UA sheet, so a channel the user has already
+   opened does not come back purple. */
 a.popup-row-label {
   flex: 0 1 auto;               /* shrinks like the span but never grows: a link stretched across
                                    the row would make the blank space beside a short name navigate */
@@ -103,9 +97,8 @@ a.popup-row-label {
   text-decoration: none;
 }
 
-/* The affordance the resting state gives up, spent where it is asked for. Keyed on [href] rather
-   than the bare class: popup.js leaves the href off when it cannot build a channel URL, and a
-   name that goes nowhere must not offer to. */
+/* Keyed on [href] rather than the bare class: popup.js leaves the href off when it cannot build
+   a channel URL, and a name that goes nowhere must not offer to. */
 .popup-row-label[href]:hover,
 .popup-row-label[href]:focus-visible {
   text-decoration: underline;
@@ -140,8 +133,7 @@ a.popup-row-label {
   font-weight: inherit;
 }
 
-/* A full-width band, so it takes the row geometry rather than the .popup-button geometry. The
-   11px uppercase treatment is the old .popup-group-title, kept so the headers read unchanged. */
+/* A full-width band, so it takes the row geometry rather than the .popup-button geometry. */
 .popup-section-toggle {
   display: flex;
   align-items: center;
@@ -164,15 +156,13 @@ a.popup-row-label {
   text-transform: uppercase;
 }
 
-/* Matches .popup-row:hover rather than .popup-button:hover: 0.1 is for controls the size of
-   their own glyph, 0.05 for anything spanning the popup. */
+/* 0.05 for anything spanning the popup, 0.1 for controls the size of their own glyph. */
 .popup-section-toggle:hover {
   background-color: rgba(255, 255, 255, 0.05);
   color: #ffffff;
 }
 
-/* Two borders on a square box rather than a glyph: the extension ships no icon font, a text
-   arrow's baseline drifts between platforms, and this rotates about its own centre. */
+/* Two borders on a square box rather than a text arrow, whose baseline drifts between platforms. */
 .popup-section-caret {
   flex: 0 0 auto;
   width: 6px;
@@ -196,8 +186,6 @@ a.popup-row-label {
   white-space: nowrap;
 }
 
-/* A collapsed section shows nothing else, so the count is the only thing telling the user
-   whether opening it is worth the click. */
 .popup-section-count {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.5);
@@ -211,10 +199,9 @@ a.popup-row-label {
 }
 
 /* --- ARTIST LISTS --- */
-/* Chrome caps a popup near 600px tall. Collapsed, this one spends roughly 250px on the header,
-   master row and three section headers, and only one section can be open at a time, so an open
-   list may take most of what is left - 260px is seven rows, deep enough to be worth scrolling
-   and short enough that the list, Clear history and an error line all stay under the cap. */
+/* Chrome caps a popup near 600px tall, and this one already spends roughly 250px on the header,
+   master row and three section headers. 260px is seven rows - deep enough to be worth scrolling,
+   short enough that the list, Clear history and an error line all stay under the cap. */
 .popup-list {
   max-height: 260px;
   overflow-y: auto;
@@ -244,9 +231,9 @@ a.popup-row-label {
   background-color: rgba(255, 255, 255, 0.35);
 }
 
-/* Unlike a category row, an artist row is not itself a control - only its name link and its
-   trailing button are. No cursor is declared for the link: the UA's pointer wins over this
-   inherited default on any anchor with an href, and a name without one correctly keeps it. */
+/* An artist row is not itself a control - only its name link and trailing button are. The link
+   needs no cursor rule: the UA's pointer wins over this on any anchor with an href, and a name
+   without one correctly keeps the default. */
 .popup-list .popup-row {
   cursor: default;
 }
@@ -345,7 +332,7 @@ a.popup-row-label {
 }
 
 .popup-switch:checked {
-  background-color: rgba(139, 92, 246, 0.9);   /* the ai-purple accent from styles.css */
+  background-color: rgba(255, 0, 51, 0.9);   /* YouTube Music logo red (#f03) */
 }
 
 .popup-switch:checked::before {

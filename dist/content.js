@@ -4,8 +4,8 @@ const PROTOCOL = 'https';
 const API_HOST = 'artist-check.com';
 const API_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check/batch`;
 const API_SINGLE_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check`;
-const BADGE_QUERY = `.${BADGE_CLASS}`;  // BADGE_CLASS, BADGE_TEXT and BADGE_EXTRA_CLASS come from settings.js
 const TARGET_LINK_SELECTOR = 'a[href*="channel/"]';
+// The badge constants (BADGE_CLASS, BADGE_QUERY, BADGE_TEXT, BADGE_EXTRA_CLASS) come from settings.js.
 
 
 // Global objects
@@ -183,11 +183,9 @@ function getArtistIdFromLink(anchorElement) {
  * @return {string} The trimmed name, capped at ARTIST_NAME_LIMIT; empty when the anchor has no text yet.
  * Notes:
  * - `addBadge` prepends a <span> *inside* the anchor, so a plain `textContent` read yields
- *   "AIThe Velvet Sundown". That is deterministic, not a race, and it would permanently
- *   pollute the stored history and the synced never-skip list.
- * - Stripping a leading 'AI' / 'H' / '?' from the string instead would corrupt every real name
- *   that happens to start with those characters, so the badge is removed structurally.
- * - The clone is detached and never inserted, so removing nodes from it cannot disturb the page.
+ *   "AIThe Velvet Sundown" and would permanently pollute the stored history.
+ * - The badge is removed structurally rather than by stripping a leading 'AI' / 'H' / '?',
+ *   which would corrupt every real name starting with those characters.
  */
 function getArtistNameFromLink(anchorElement) {
   const clone = anchorElement.cloneNode(true);
