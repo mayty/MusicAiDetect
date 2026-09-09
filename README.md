@@ -63,6 +63,13 @@ reload the extension on `chrome://extensions`.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow and the
 non-obvious design decisions, and [CLAUDE.md](CLAUDE.md) for agent/contributor notes.
 
+## Continuous integration
+
+GitHub Actions guards changes (`npm run lint`, `npm test`, `npm run check`) on every
+pull request and on pushes to `master`. A tag push (e.g. `0.3.0`) runs `make package`,
+attaches `{tag}.zip` to a release, and fills its notes from the matching `CHANGELOG.md`
+section; a pull request instead uploads a `pr-{n}.zip` artifact for manual testing.
+
 ## Data
 
 Artist **ids** are sent to artist-check.com to look up their

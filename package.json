@@ -1,0 +1,16 @@
+{
+  "name": "ytm-ai-artist-detector",
+  "version": "0.3.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "lint": "eslint dist/*.js",
+    "test": "node --test",
+    "check": "node scripts/ci-check.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0"
+  }
+}
