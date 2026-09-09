@@ -3,10 +3,13 @@
 // Watches the player bar and presses "Next" when a credited artist of the current
 // track falls into a category the user selected in the popup.
 //
-// Reuses `getArtistIdFromLink`, `checkIsAiArtist` and `artistCache` from content.js,
-// and `mergeSettings`/`isSkippedCategory`/`subscribeToSettings` from settings.js - all
-// three files share one global scope, so every name declared here is prefixed to avoid
-// colliding with theirs.
+// Reuses `getArtistIdFromLink`, `getArtistNameFromLink`, `checkIsAiArtist` and `artistCache`
+// from content.js, and the merge/load/subscribe helpers plus `isSkippedCategory` and
+// `isNoSkipArtist` from settings.js - all three files share one global scope, so every name
+// declared here is prefixed to avoid colliding with theirs.
+//
+// An artist on the never-skip list vetoes the whole track: if any credited artist is listed,
+// the track plays even when another credited artist matches a selected category.
 
 
 // Constants
@@ -28,6 +31,7 @@ const AUTOSKIP_STREAK_RESET_MS = 60000;  /* a slow trickle of skips is not a run
 
 // Global objects
 let autoSkipSettings = mergeSettings(null);   // fail closed until the real settings load
+let autoSkipNoSkipList = mergeNoSkipList(null);
 let autoSkipWrapper = null;                   // the observed .content-info-wrapper
 let autoSkipObserver = null;
 let autoSkipVideo = null;
@@ -63,12 +67,15 @@ function buildAutoSkipKey(title, artistIds) {
 /**
  * Reads a coherent snapshot of the track currently shown in the player bar.
  *
- * @return {{wrapper: HTMLElement, title: string, artistIds: string[], key: string}|null}
+ * @return {{wrapper: HTMLElement, title: string, artistIds: string[], artistNames: Map.<string, string>, key: string}|null}
  *   The snapshot, or null when the player bar is not rendered yet.
  * Notes:
  * - Every anchor in the wrapper is offered to `getArtistIdFromLink`, which returns null for
  *   the album link (`browse/MPRE...`), so no separate filtering is needed. The year is a bare
  *   text node and never appears as an anchor.
+ * - Names are best-effort metadata for the skip history only. They are deliberately kept out
+ *   of the key: the byline's text populates independently of its hrefs, so a name in the key
+ *   would churn it on every text mutation and delay every skip.
  */
 function readAutoSkipSnapshot() {
   const wrapper = document.querySelector(AUTOSKIP_CONTENT_INFO_SELECTOR);
@@ -78,13 +85,23 @@ function readAutoSkipSnapshot() {
   const title = titleElement ? titleElement.textContent.trim() : '';
 
   const artistIds = [];
+  const artistNames = new Map();
   wrapper.querySelectorAll('a').forEach(anchorElement => {
     const artistId = getArtistIdFromLink(anchorElement);
-    if (artistId && !artistIds.includes(artistId)) artistIds.push(artistId);
+    if (!artistId) return;
+
+    if (!artistIds.includes(artistId)) artistIds.push(artistId);
+    if (!artistNames.get(artistId)) artistNames.set(artistId, getArtistNameFromLink(anchorElement));
   });
   artistIds.sort();   // stable against YouTube Music reordering the byline
 
-  return { wrapper: wrapper, title: title, artistIds: artistIds, key: buildAutoSkipKey(title, artistIds) };
+  return {
+    wrapper: wrapper,
+    title: title,
+    artistIds: artistIds,
+    artistNames: artistNames,
+    key: buildAutoSkipKey(title, artistIds)
+  };
 }
 
 
@@ -225,9 +242,18 @@ function releaseAutoSkipStreak() {
 /**
  * Resolves the status of every credited artist and skips the track if any of them matches.
  *
- * @param {{wrapper: HTMLElement, title: string, artistIds: string[], key: string}} snapshot - The committed snapshot.
+ * @param {{wrapper: HTMLElement, title: string, artistIds: string[], artistNames: Map.<string, string>, key: string}} snapshot - The committed snapshot.
  * @param {number} generation - The generation counter for this evaluation.
  * @return {Promise<void>} Resolves once the track has been evaluated.
+ * Notes:
+ * - The never-skip veto is checked before the `checkIsAiArtist` round trip: it needs no status,
+ *   it spares the API a request per whitelisted track, and running before the `await` means it
+ *   cannot be racing a track change and so needs no isAutoSkipCurrent re-check.
+ * - The veto is only as good as the byline. If YouTube Music renders one of two credited
+ *   anchors and leaves it that way past the confirmation window, the committed snapshot can be
+ *   missing the listed artist and the track is skipped anyway. The two-read gate makes this
+ *   unlikely - a partial byline yields a different key, so both reads have to agree on it -
+ *   and closing it properly would mean waiting on a byline that may never grow.
  */
 async function evaluateAutoSkipTrack(snapshot, generation) {
   if (!autoSkipSettings.enabled) return;
@@ -235,6 +261,14 @@ async function evaluateAutoSkipTrack(snapshot, generation) {
   // A track with no linked artist (a user upload) can never match, so it counts as progress.
   // Note this is NOT the same as the 'unknown' status and must never cause a skip.
   if (snapshot.artistIds.length === 0) {
+    releaseAutoSkipStreak();
+    return;
+  }
+
+  // One listed artist vetoes the whole track. This counts as progress for exactly the same
+  // reason the no-match branch below does - a track was allowed to play - and saying so is
+  // what stops a run of whitelisted tracks from being unable to lift a suspension.
+  if (snapshot.artistIds.some(artistId => isNoSkipArtist(autoSkipNoSkipList, artistId))) {
     releaseAutoSkipStreak();
     return;
   }
@@ -251,7 +285,12 @@ async function evaluateAutoSkipTrack(snapshot, generation) {
   if (!isAutoSkipCurrent(snapshot, generation)) return;
   if (!autoSkipSettings.enabled) return;
 
-  const matched = snapshot.artistIds.filter((artistId, index) => isAutoSkipStatus(statuses[index], artistId));
+  const matched = [];
+  snapshot.artistIds.forEach((artistId, index) => {
+    if (!isAutoSkipStatus(statuses[index], artistId)) return;
+
+    matched.push({ id: artistId, name: snapshot.artistNames.get(artistId) || '', status: statuses[index] });
+  });
   if (matched.length === 0) {
     releaseAutoSkipStreak();   // a track was allowed to play - we are making progress
     return;
@@ -265,8 +304,16 @@ async function evaluateAutoSkipTrack(snapshot, generation) {
  * Issues a skip for the given track, subject to the runaway guards.
  *
  * @param {{title: string, key: string}} snapshot - The track to skip.
- * @param {string[]} matched - The artist IDs that justified the skip, for logging.
+ * @param {Array.<{id: string, name: string, status: string}>} matched - The artists that justified the skip.
  * @return {void}
+ * Notes:
+ * - `matched` is built from the snapshot *before* the click, because reading the byline after
+ *   dispatching it would race Polymer's update of the player bar.
+ * - The history is written only once the click was actually dispatched, so a suppressed or
+ *   impossible skip leaves no trace. A click that `verifyAutoSkip` later proves was a no-op
+ *   (repeat-one, end of queue) does record an entry; moving the write into verifyAutoSkip is
+ *   not an option, because commitAutoSkipTrack cancels that timeout in exactly the case where
+ *   the skip *succeeded*. The unskippable latch caps this at one stray entry per track.
  */
 function requestAutoSkip(snapshot, matched) {
   if (autoSkipSuspended) return;
@@ -286,9 +333,10 @@ function requestAutoSkip(snapshot, matched) {
   autoSkipConsecutiveSkips += 1;
   autoSkipLastSkipAt = Date.now();
   autoSkipPendingKey = snapshot.key;
-  console.log(AUTOSKIP_LOG_PREFIX, `Skipping "${snapshot.title}"`, matched);
+  console.log(AUTOSKIP_LOG_PREFIX, `Skipping "${snapshot.title}"`, matched.map(artist => artist.id));
 
   if (performAutoSkip()) {
+    recordSkippedArtists(matched);   // fire and forget - it never rejects
     autoSkipVerifyTimeout = setTimeout(() => verifyAutoSkip(snapshot.key), AUTOSKIP_VERIFY_MS);
   } else {
     autoSkipUnskippableKey = snapshot.key;
@@ -363,6 +411,24 @@ function reevaluateAutoSkipTrack() {
 
 
 /**
+ * Drops every latch that refers to a decision made under the previous configuration.
+ *
+ * @return {void}
+ * Notes:
+ * - This is what lets a configuration change recover a suspended state: the verdict that
+ *   suspended auto-skip, or marked a track unskippable, was reached under rules that no
+ *   longer apply.
+ */
+function resetAutoSkipLatches() {
+  releaseAutoSkipStreak();
+  autoSkipUnskippableKey = null;
+  clearTimeout(autoSkipVerifyTimeout);
+  autoSkipVerifyTimeout = null;
+  autoSkipPendingKey = null;
+}
+
+
+/**
  * Applies a settings update and re-checks what is playing right now.
  *
  * @param {{enabled: boolean, categories: Object.<string, boolean>}} settings - The new settings.
@@ -371,17 +437,29 @@ function reevaluateAutoSkipTrack() {
  * - Ticking a category while a matching track plays is a request to get rid of it now, so the
  *   current track is re-evaluated immediately rather than at the next track change. Un-ticking
  *   needs no special handling - the re-evaluation simply yields "don't skip".
- * - Clearing the latches here is what lets a settings change recover a suspended state.
  */
 function handleAutoSkipSettingsChange(settings) {
   autoSkipSettings = settings;
 
-  releaseAutoSkipStreak();
-  autoSkipUnskippableKey = null;
-  clearTimeout(autoSkipVerifyTimeout);
-  autoSkipVerifyTimeout = null;
-  autoSkipPendingKey = null;
+  resetAutoSkipLatches();
+  if (autoSkipSettings.enabled) reevaluateAutoSkipTrack();
+}
 
+
+/**
+ * Applies a never-skip list update and re-checks what is playing right now.
+ *
+ * @param {Object.<string, string>} noSkipList - The new never-skip list.
+ * @return {void}
+ * Notes:
+ * - Removing an artist from the list while one of their tracks plays is a request to apply the
+ *   category rules to it now, so it is re-evaluated immediately. Adding one needs no special
+ *   handling: their track has already been skipped by the time the user can press the button.
+ */
+function handleAutoSkipNoSkipChange(noSkipList) {
+  autoSkipNoSkipList = noSkipList;
+
+  resetAutoSkipLatches();
   if (autoSkipSettings.enabled) reevaluateAutoSkipTrack();
 }
 
@@ -441,24 +519,33 @@ function bindAutoSkipObserver() {
 
 
 /**
- * Starts auto-skip once the initial settings are known.
+ * Starts auto-skip once the initial configuration is known.
  *
  * @param {{enabled: boolean, categories: Object.<string, boolean>}} settings - The stored settings.
+ * @param {Object.<string, string>} noSkipList - The stored never-skip list.
  * @return {void}
  * Notes:
  * - Binding always ends with an immediate read, so attaching after the page has already started
  *   playing loses nothing - there is no event to have missed. That is what makes it safe to
- *   wait for the settings before starting, instead of buffering track changes.
+ *   wait for storage before starting, instead of buffering track changes.
+ * - Both values must be loaded before anything evaluates, and for opposite reasons: the settings
+ *   fail *closed* (mergeSettings(null) disables everything), but an empty never-skip list fails
+ *   *open* - it would happily skip a whitelisted artist. Nothing here may start evaluating
+ *   before the promise below resolves.
  * - The watchdog covers the player bar not existing at document_idle and Polymer replacing the
  *   observed element later; it costs two querySelector calls per second.
  */
-function startAutoSkip(settings) {
+function startAutoSkip(settings, noSkipList) {
   autoSkipSettings = settings;
+  autoSkipNoSkipList = noSkipList;
   subscribeToSettings(handleAutoSkipSettingsChange);
+  subscribeToNoSkipList(handleAutoSkipNoSkipChange);
 
   bindAutoSkipObserver();
   setInterval(bindAutoSkipObserver, AUTOSKIP_WATCHDOG_MS);
 }
 
 
-loadSettings().then(startAutoSkip);
+// The skip history is deliberately not subscribed to: this file only ever writes it.
+Promise.all([loadSettings(), loadNoSkipList()])
+  .then(([settings, noSkipList]) => startAutoSkip(settings, noSkipList));

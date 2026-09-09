@@ -26,6 +26,23 @@
       <!-- popup.js clones the template below once per CATEGORY_ORDER entry -->
     </fieldset>
 
+    <!-- Both sections sit outside the fieldset above: its :disabled rules cascade to every
+         descendant, and these lists stay usable while the master toggle is off. -->
+    <section class="popup-group">
+      <h2 class="popup-group-title">Never skip</h2>
+      <p class="popup-empty" id="noskip-empty">No artists yet. Add them from the list below.</p>
+      <div class="popup-list" id="noskip-list"></div>
+    </section>
+
+    <section class="popup-group">
+      <h2 class="popup-group-title">Recently skipped</h2>
+      <p class="popup-empty" id="history-empty">Nothing skipped yet.</p>
+      <div class="popup-list" id="history-list"></div>
+      <button class="popup-button" type="button" data-action="clear-history">Clear history</button>
+    </section>
+
+    <p class="popup-error" id="popup-error" role="status" hidden></p>
+
     <template id="category-row-template">
       <label class="popup-row">
         <span class="popup-row-badge" aria-hidden="true">
@@ -34,6 +51,24 @@
         <span class="popup-row-label"></span>
         <input class="popup-switch" type="checkbox" role="switch">
       </label>
+    </template>
+
+    <!-- Artist rows are divs, not labels: they carry a button rather than a checkbox. -->
+    <template id="noskip-row-template">
+      <div class="popup-row">
+        <span class="popup-row-label"></span>
+        <button class="popup-row-action" type="button" data-action="remove-noskip">&times;</button>
+      </div>
+    </template>
+
+    <template id="history-row-template">
+      <div class="popup-row">
+        <span class="popup-row-badge" aria-hidden="true">
+          <span class="artist-badge"></span>
+        </span>
+        <span class="popup-row-label"></span>
+        <button class="popup-row-action" type="button" data-action="add-noskip">+</button>
+      </div>
     </template>
 
     <script src="settings.js"></script>

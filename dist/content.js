@@ -176,6 +176,28 @@ function getArtistIdFromLink(anchorElement) {
 
 
 /**
+ * Extracts the artist's display name from an anchor element, ignoring any badge this
+ * extension has injected into it.
+ *
+ * @param {HTMLElement} anchorElement - The anchor element to read.
+ * @return {string} The trimmed name, capped at ARTIST_NAME_LIMIT; empty when the anchor has no text yet.
+ * Notes:
+ * - `addBadge` prepends a <span> *inside* the anchor, so a plain `textContent` read yields
+ *   "AIThe Velvet Sundown". That is deterministic, not a race, and it would permanently
+ *   pollute the stored history and the synced never-skip list.
+ * - Stripping a leading 'AI' / 'H' / '?' from the string instead would corrupt every real name
+ *   that happens to start with those characters, so the badge is removed structurally.
+ * - The clone is detached and never inserted, so removing nodes from it cannot disturb the page.
+ */
+function getArtistNameFromLink(anchorElement) {
+  const clone = anchorElement.cloneNode(true);
+  clone.querySelectorAll(BADGE_QUERY).forEach(badge => badge.remove());
+
+  return clampArtistName(clone.textContent);
+}
+
+
+/**
  * Marks the given element with a badge to indicate the artist type.
  *
  * @param {HTMLElement} element - The DOM element to be marked with the artist badge.

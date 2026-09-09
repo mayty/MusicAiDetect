@@ -79,23 +79,33 @@
   cursor: inherit;
 }
 
+/* Artist names are unbounded and the popup is 300px wide, so the label has to be the part
+   that gives way rather than pushing the action button off the edge. */
 .popup-row-label {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* --- CATEGORY GROUP --- */
+/* --- GROUPS --- */
+/* Shared by the category <fieldset> and the two artist <section>s. */
 .popup-group {
   display: block;               /* flex on a fieldset has Chromium layout quirks */
-  margin: 0;
+  margin: 0 0 12px;
   padding: 0;
   border: 0;
 }
 
+/* Also resets the top margin and weight a bare <h2> would otherwise bring, so the section
+   headings match the fieldset's <legend>. */
 .popup-group-title {
+  margin: 0 0 4px;
   padding: 0 8px;
-  margin-bottom: 4px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -112,6 +122,80 @@
 
 .popup-group:disabled .popup-row:hover {
   background-color: transparent;
+}
+
+/* --- ARTIST LISTS --- */
+/* Chrome caps a popup near 600px tall and the header, master row and four category rows
+   already spend roughly 200px, so each list scrolls on its own rather than letting the whole
+   popup scroll and take the master toggle off screen with it. */
+.popup-list {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+/* Unlike a category row, an artist row is not itself a control - only its trailing button is. */
+.popup-list .popup-row {
+  cursor: default;
+}
+
+.popup-empty,
+.popup-error {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.popup-empty {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.popup-error {
+  margin-top: 8px;
+  color: rgba(255, 138, 128, 0.95);
+}
+
+.popup-row-action {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+
+  background-color: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.popup-button {
+  width: 100%;
+  min-height: 28px;
+  margin-top: 8px;
+
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.popup-row-action:hover,
+.popup-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* The popup is dark-only, and the UA focus ring is not reliably visible on it. */
+.popup-row-action:focus-visible,
+.popup-button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 /* --- SWITCH --- */
