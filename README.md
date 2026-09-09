@@ -13,5 +13,8 @@ and the skip history — each showing how many entries it holds. They open one a
 switching auto-skip on opens the category list for you.
 
 The same popup lists the artists that have been skipped, most recent first, and lets you move
-any of them to a "never skip" list. A listed artist vetoes the whole track: it plays through
-even when another artist credited on it falls into a skipped category.
+any of them to a "never skip" list. Artist names in both lists link to the artist's page on
+YouTube Music: a plain click opens it in a new tab, while ctrl-click (Cmd-click on macOS) or a
+middle-click opens it in the background and leaves the popup open, so several artists can be
+queued at once. A listed artist vetoes the whole track: it plays through even when another
+artist credited on it falls into a skipped category.

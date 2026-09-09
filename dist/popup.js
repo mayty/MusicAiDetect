@@ -31,8 +31,13 @@ const POPUP_SECTION_SELECTOR = '.popup-section';
 const POPUP_SECTION_TOGGLE_SELECTOR = '.popup-section-toggle';
 const POPUP_SECTION_PANEL_SELECTOR = '.popup-section-panel';
 const POPUP_SETTINGS_CONTROL_SELECTOR = `#${POPUP_GROUP_ID}, .popup-row.is-master`;
+const POPUP_ROW_LINK_SELECTOR = '.popup-row-label[href]';
+const POPUP_ROW_FOCUS_SELECTOR = `.popup-row-action, ${POPUP_ROW_LINK_SELECTOR}`;
+const POPUP_LINK_FOCUS_TOKEN = 'name';   /* stands in for [data-action] on the row's name link */
+const POPUP_CHANNEL_URL_BASE = 'https://music.youtube.com/channel/';
 const POPUP_FULL_MESSAGE = 'The never-skip list is full. Remove an artist first.';
 const POPUP_SAVE_MESSAGE = 'Could not save. Your change was not applied.';
+const POPUP_TAB_MESSAGE = 'Could not open the artist page. Try a plain click instead.';
 
 
 // Global objects
@@ -278,20 +283,51 @@ function getArtistDisplayName(artistId, name) {
 
 
 /**
+ * Builds the YouTube Music channel URL for an artist.
+ *
+ * @param {string} artistId - The artist's channel id.
+ * @return {string} The channel page URL, or '' when the id is not one this extension could
+ *   have produced.
+ * Notes:
+ * - Same acceptance rule as getArtistIdFromLink, via isArtistId: an id that fails it is not
+ *   linked at all rather than linked hopefully. mergeNoSkipList and mergeSkipHistory filter on
+ *   the same test, so this only ever fires against a hand-edited store.
+ * - `channel/<id>` is the URL form the content script already reads ids out of, so no
+ *   translation is needed - getArtistIdFromLink strips the `MPLA` prefix that some page links
+ *   carry and stores the bare channel id that arrives here.
+ * - encodeURIComponent, not encodeURI: isArtistId establishes only the 'UC' prefix, so the tail
+ *   of a hand-edited id could hold '/', '?' or '#', which encodeURI leaves intact and which
+ *   would steer the URL out of the channel path segment. A real channel id is unreserved
+ *   throughout, so this changes nothing for the ids the extension actually stores.
+ */
+function getArtistChannelUrl(artistId) {
+  if (!isArtistId(artistId)) return '';
+
+  return POPUP_CHANNEL_URL_BASE + encodeURIComponent(artistId);
+}
+
+
+/**
  * Remembers which row action currently has focus.
  *
  * @return {{artistId: string, action: string}|null} A token for restorePopupFocus, or null.
  * Notes:
  * - The lists are rebuilt wholesale, including on a background tab's skip. Without this, a
  *   keyboard user's focus silently drops to <body> whenever a track is skipped elsewhere.
+ * - The name link has no [data-action] of its own - handlePopupClick does not route it - so it
+ *   is recorded under POPUP_LINK_FOCUS_TOKEN instead. Nothing else in a row is focusable, so
+ *   the token stays a two-way choice.
  */
 function capturePopupFocus() {
   const activeElement = document.activeElement;
-  const action = (activeElement && activeElement.closest) ? activeElement.closest('.popup-row-action') : null;
-  if (!action) return null;
+  const focused = (activeElement && activeElement.closest) ? activeElement.closest(POPUP_ROW_FOCUS_SELECTOR) : null;
+  if (!focused) return null;
 
-  const row = action.closest('.popup-row');
-  return { artistId: row ? row.dataset.artistId : '', action: action.dataset.action };
+  const row = focused.closest('.popup-row');
+  return {
+    artistId: row ? row.dataset.artistId : '',
+    action: focused.dataset.action || POPUP_LINK_FOCUS_TOKEN
+  };
 }
 
 
@@ -304,13 +340,19 @@ function capturePopupFocus() {
  * - Does nothing when the row is gone, which is the normal outcome of the user's own click:
  *   promoting an artist removes their history row. Chasing focus across sections in that case
  *   would move it somewhere the user did not ask for.
+ * - The [href] in POPUP_ROW_LINK_SELECTOR does double duty: an unlinked name is not focusable,
+ *   so the lookup finds nothing and focus is left alone rather than thrown at an inert element.
  */
 function restorePopupFocus(token) {
   if (!token || !token.artistId) return;
 
   const row = document.querySelector(`.popup-row[data-artist-id="${CSS.escape(token.artistId)}"]`);
-  const action = row ? row.querySelector(`[data-action="${token.action}"]`) : null;
-  if (action) action.focus();
+  if (!row) return;
+
+  const target = token.action === POPUP_LINK_FOCUS_TOKEN
+    ? row.querySelector(POPUP_ROW_LINK_SELECTOR)
+    : row.querySelector(`[data-action="${token.action}"]`);
+  if (target) target.focus();
 }
 
 
@@ -335,6 +377,35 @@ function replacePopupRows(listElement, emptyElement, rows) {
 
 
 /**
+ * Fills a row's name cell and points it at the artist's channel.
+ *
+ * @param {HTMLElement} rowElement - The cloned row.
+ * @param {string} artistId - The artist's channel id.
+ * @param {string} displayName - The text to show, from getArtistDisplayName.
+ * @return {void}
+ * Notes:
+ * - The href is omitted rather than set to '', because an empty href resolves to popup.html
+ *   itself: the name would stay a focusable, clickable link pointing at the popup. Rows are
+ *   cloned fresh from the template on every render, so the attribute is simply never added and
+ *   there is nothing to remove.
+ * - A row with no href renders as the plain text it always was: every link rule in popup.css is
+ *   keyed on [href], and an anchor without one is neither tabbable nor pointer-cursored.
+ * - A name-less artist still links. The id is all the row can show, and the channel page is
+ *   exactly where the user finds out whose id it is.
+ * - title carries the untruncated name: .popup-row-label ellipsises inside 300px less the badge
+ *   and the button, and nothing else in the popup can reveal the rest.
+ */
+function fillArtistRowName(rowElement, artistId, displayName) {
+  const nameElement = rowElement.querySelector('.popup-row-label');
+  const channelUrl = getArtistChannelUrl(artistId);
+
+  nameElement.innerText = displayName;
+  nameElement.title = displayName;
+  if (channelUrl) nameElement.href = channelUrl;
+}
+
+
+/**
  * Builds one never-skip row from the template.
  *
  * @param {string} artistId - The artist's channel id.
@@ -347,7 +418,7 @@ function buildNoSkipRow(artistId, name) {
 
   const rowElement = row.querySelector('.popup-row');
   rowElement.dataset.artistId = artistId;
-  rowElement.querySelector('.popup-row-label').innerText = displayName;
+  fillArtistRowName(rowElement, artistId, displayName);
   rowElement.querySelector('.popup-row-action')
     .setAttribute('aria-label', `Remove ${displayName} from the never-skip list`);
 
@@ -374,7 +445,7 @@ function buildHistoryRow(entry) {
 
   const rowElement = row.querySelector('.popup-row');
   rowElement.dataset.artistId = entry.id;
-  rowElement.querySelector('.popup-row-label').innerText = displayName;
+  fillArtistRowName(rowElement, entry.id, displayName);
   rowElement.querySelector('.popup-row-action').setAttribute('aria-label', `Never skip ${displayName}`);
 
   return row;
@@ -499,6 +570,81 @@ async function clearSkipHistory() {
 
 
 /**
+ * Decides whether a click asks for a tab opened behind the popup.
+ *
+ * @param {MouseEvent} event - The click or auxclick event.
+ * @return {boolean} True for a ctrl/Cmd-click and for a middle-click.
+ * Notes:
+ * - Two gestures across two event types, which is why the caller is bound to both. Chrome
+ *   dispatches 'click' for the primary button only, so a ctrl-click arrives as a click with
+ *   button 0, while the middle button skips 'click' entirely and arrives as 'auxclick' with
+ *   button 1.
+ * - The button test is what keeps the context menu working. A right-click is an 'auxclick' too,
+ *   with button 2, and falls through here, so nothing calls preventDefault on it and "Copy link
+ *   address" is untouched.
+ * - shiftKey is excluded rather than ignored: Ctrl+Shift-click means "new tab, in front" in
+ *   Chrome, and a foreground open is exactly what the popup cannot survive. Excluding it leaves
+ *   every shift combination native, alongside the plain Shift-click that opens a window.
+ * - altKey is not excluded. Alt-click carries no ctrl or meta, so it already falls through to
+ *   the browser's download, which is the only Alt gesture a link has.
+ * - metaKey is what covers macOS, where Cmd-click is the new-tab gesture. Ctrl-click there is
+ *   the context-menu gesture instead, and Chrome dispatches contextmenu and no click at all for
+ *   it, so the ctrlKey branch is unreachable on a Mac and needs no platform test to hold it back.
+ */
+function isPopupBackgroundTabClick(event) {
+  if (event.shiftKey) return false;
+
+  return event.button === 1 || (event.button === 0 && (event.ctrlKey || event.metaKey));
+}
+
+
+/**
+ * Turns a ctrl-click or middle-click on an artist name into a background tab.
+ *
+ * @param {MouseEvent} event - The click or auxclick event.
+ * @return {void}
+ * Notes:
+ * - The reason the gesture is intercepted at all: Chrome dismisses the popup for any tab the
+ *   popup's own document opens, whatever the disposition, so the anchor's own ctrl-click and
+ *   middle-click took the popup down with them and only one artist could ever be queued. A
+ *   tabs.create is serviced in the browser process instead of through the popup's web contents,
+ *   and active:false keeps focus on the bubble, so neither thing that dismisses a popup happens.
+ *   active:true would bring the second one straight back - which is what a plain click is
+ *   deliberately left to do for itself, because there the popup closing is the point.
+ * - tabs.create needs no permission. "tabs" gates reading a tab's url, pendingUrl, title and
+ *   favIconUrl, none of which this touches; the returned Tab is ignored.
+ * - A listener of its own rather than a case in handlePopupClick, and the popup's only 'auxclick'
+ *   listener. That switch never looks at event.button, so binding it to 'auxclick' as well would
+ *   let a middle- OR right-click on a row's button promote or remove an artist.
+ * - The gesture is tested before the target, because every plain click in the popup reaches this
+ *   handler and that is the branch worth leaving cheapest.
+ * - Reads the href off the element rather than rebuilding it from the row's artist id, so
+ *   fillArtistRowName stays the one place that decides where a name points and the tab can never
+ *   disagree with what the context menu copies.
+ * - The new tab lands at the end of the strip rather than beside the opener, where a native
+ *   ctrl-click would put it. Matching that needs a prior tabs.query for the current tab's index,
+ *   which is a second call that can fail, for a position nobody asked about.
+ * - Reports on screen, not only to the console. preventDefault has already suppressed the
+ *   browser's own open by the time the write fails, so a rejection leaves a click that did
+ *   nothing at all and nothing saying why - the case showPopupError exists for.
+ */
+function handlePopupLinkClick(event) {
+  if (!isPopupBackgroundTabClick(event)) return;
+
+  const link = event.target.closest(POPUP_ROW_LINK_SELECTOR);
+  if (!link) return;
+
+  event.preventDefault();
+  showPopupError('');
+
+  chrome.tabs.create({ url: link.href, active: false }).catch(error => {
+    console.error('Artist page was not opened', error);
+    showPopupError(POPUP_TAB_MESSAGE);
+  });
+}
+
+
+/**
  * Routes a click on any of the popup's buttons.
  *
  * @param {Event} event - The click event.
@@ -509,6 +655,13 @@ async function clearSkipHistory() {
  * - The section headers ride this same switch instead of taking a listener of their own. They
  *   are <button>s outside any .popup-row, so the artistId above is empty for them, exactly as
  *   it already is for clear-history.
+ * - The artist name links are deliberately outside this switch. They carry no [data-action], so
+ *   the closest() below returns null and a plain click is left to navigate natively, which
+ *   closes the popup and puts the channel page in front of the user, exactly as intended. The
+ *   two background-tab gestures are intercepted in handlePopupLinkClick instead.
+ * - Bound to 'click' only, never to 'auxclick'. The switch below does not look at event.button,
+ *   so a middle- or right-click on a row would match [data-action] and promote or remove an
+ *   artist the user only meant to open, or right-click for the address.
  */
 function handlePopupClick(event) {
   const action = event.target.closest('[data-action]');
@@ -549,6 +702,11 @@ function handlePopupClick(event) {
  * - The accordion adds no listener of its own: the header buttons are [data-action] targets, so
  *   the delegated click handler already routes them, and the sections start collapsed from the
  *   hidden attributes in popup.html rather than from a first render pass.
+ * - The artist names take a second click listener, plus the popup's only auxclick listener,
+ *   because their two background-tab gestures have to be intercepted rather than routed and the
+ *   switch in handlePopupClick is not safe to run for a non-primary button. The two click
+ *   listeners can never both match: the links carry no [data-action], and no [data-action]
+ *   element is a link. See handlePopupLinkClick.
  */
 async function initializePopup() {
   popupMasterToggle = document.getElementById(POPUP_MASTER_ID);
@@ -583,6 +741,8 @@ async function initializePopup() {
 
   document.body.addEventListener('change', handleSettingsChange);
   document.body.addEventListener('click', handlePopupClick);
+  document.body.addEventListener('click', handlePopupLinkClick);
+  document.body.addEventListener('auxclick', handlePopupLinkClick);
   document.body.classList.remove(POPUP_LOADING_CLASS);
 }
 

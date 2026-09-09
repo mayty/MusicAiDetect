@@ -90,10 +90,15 @@
       </label>
     </template>
 
-    <!-- Artist rows are divs, not labels: they carry a button rather than a checkbox. -->
+    <!-- Artist rows are divs, not labels: they carry a button rather than a checkbox. The name is
+         an <a> whose href popup.js fills in; it is left off entirely when no channel URL can be
+         built, which is what keeps such a row plain text and out of the tab order. The link
+         carries no data-action - handlePopupClick does not route it, and a plain click is left
+         to navigate natively, popup and all. The href is still what the context menu copies and
+         what handlePopupLinkClick reads when a ctrl- or middle-click asks for a background tab. -->
     <template id="noskip-row-template">
       <div class="popup-row">
-        <span class="popup-row-label"></span>
+        <a class="popup-row-label" target="_blank" rel="noreferrer"></a>
         <button class="popup-row-action" type="button" data-action="remove-noskip">&times;</button>
       </div>
     </template>
@@ -103,7 +108,7 @@
         <span class="popup-row-badge" aria-hidden="true">
           <span class="artist-badge"></span>
         </span>
-        <span class="popup-row-label"></span>
+        <a class="popup-row-label" target="_blank" rel="noreferrer"></a>
         <button class="popup-row-action" type="button" data-action="add-noskip">+</button>
       </div>
     </template>
