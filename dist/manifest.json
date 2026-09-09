@@ -1,12 +1,23 @@
 {
   "manifest_version": 3,
   "name": "YTM AI Artist Detector",
-  "version": "0.2.0",
-  "description": "Marks AI artists on YouTube Music.",
+  "version": "0.7.0",
+  "description": "Marks AI artists on YouTube Music and can auto-skip them.",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "YTM AI Artist Detector",
+    "default_icon": {
+      "16": "16.png",
+      "32": "32.png",
+      "48": "48.png",
+      "128": "128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["https://music.youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["settings.js", "content.js", "autoskip.js"],
       "css": ["styles.css"]
     }
   ],

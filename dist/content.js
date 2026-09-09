@@ -4,21 +4,8 @@ const PROTOCOL = 'https';
 const API_HOST = 'artist-check.com';
 const API_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check/batch`;
 const API_SINGLE_ENDPOINT = `${PROTOCOL}://${API_HOST}/youtube/v1/artists/check`;
-const BADGE_CLASS = 'artist-badge';
-const BADGE_QUERY = `.${BADGE_CLASS}`;
-const BADGE_TEXT = {
-  'human': 'H',
-  'ai': 'AI',
-  'unknown': '?',
-  'associated': 'AI'   /* same icon/label as AI, distinguished by the dim-blue color */
-}
-const BADGE_EXTRA_CLASS = {
-  'human': 'is-human',
-  'ai': 'is-ai',
-  'unknown': 'is-unknown',
-  'associated': 'is-associated'
-}
 const TARGET_LINK_SELECTOR = 'a[href*="channel/"]';
+// The badge constants (BADGE_CLASS, BADGE_QUERY, BADGE_TEXT, BADGE_EXTRA_CLASS) come from settings.js.
 
 
 // Global objects
@@ -185,6 +172,26 @@ function getArtistIdFromLink(anchorElement) {
     // Handle invalid URLs gracefully
   }
   return null;
+}
+
+
+/**
+ * Extracts the artist's display name from an anchor element, ignoring any badge this
+ * extension has injected into it.
+ *
+ * @param {HTMLElement} anchorElement - The anchor element to read.
+ * @return {string} The trimmed name, capped at ARTIST_NAME_LIMIT; empty when the anchor has no text yet.
+ * Notes:
+ * - `addBadge` prepends a <span> *inside* the anchor, so a plain `textContent` read yields
+ *   "AIThe Velvet Sundown" and would permanently pollute the stored history.
+ * - The badge is removed structurally rather than by stripping a leading 'AI' / 'H' / '?',
+ *   which would corrupt every real name starting with those characters.
+ */
+function getArtistNameFromLink(anchorElement) {
+  const clone = anchorElement.cloneNode(true);
+  clone.querySelectorAll(BADGE_QUERY).forEach(badge => badge.remove());
+
+  return clampArtistName(clone.textContent);
 }
 
 

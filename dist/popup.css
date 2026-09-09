@@ -1,0 +1,353 @@
+/* This file has been created with the assistance of an AI tool. */
+
+/* --- PAGE --- */
+/* Dark by design: the .artist-badge colors in styles.css are all white-alpha, so the
+   Human badge would be white-on-white and Unknown near-invisible on a light surface. */
+* {
+  box-sizing: border-box;
+}
+
+.popup {
+  width: 300px;
+  margin: 0;
+  padding: 14px;
+
+  background-color: #030303;  /* YouTube Music's body black */
+  color: #ffffff;
+
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Settings load asynchronously; hiding until the first paint avoids every switch
+   flashing from off to its stored position. */
+.popup.is-loading {
+  visibility: hidden;
+}
+
+/* --- HEADER --- */
+.popup-header {
+  margin-bottom: 12px;
+}
+
+.popup-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.popup-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+/* --- ROWS --- */
+.popup-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.popup-row:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* The divider belongs to .popup-sections, not here: this row survives the master toggle going
+   off and the sections do not, so a border here would be a rule drawn under nothing. */
+.popup-row.is-master {
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+/* Fixed-width cell so the labels line up despite 'AI', 'H' and '?' having different widths. */
+.popup-row-badge {
+  flex: 0 0 30px;
+  display: flex;
+  justify-content: flex-start;
+  cursor: inherit;              /* .artist-badge sets cursor: default, which fights the row */
+}
+
+.popup-row-badge .artist-badge {
+  margin-right: 0;              /* the row provides its own spacing */
+  cursor: inherit;
+}
+
+/* Artist names are unbounded and the popup is 300px wide, so the label has to be the part
+   that gives way rather than pushing the action button off the edge. */
+.popup-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Only the two artist templates use the anchor form of the label. Declaring color here settles
+   :visited too - any author declaration beats the UA sheet, so a channel the user has already
+   opened does not come back purple. */
+a.popup-row-label {
+  flex: 0 1 auto;               /* shrinks like the span but never grows: a link stretched across
+                                   the row would make the blank space beside a short name navigate */
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Keyed on [href] rather than the bare class: popup.js leaves the href off when it cannot build
+   a channel URL, and a name that goes nowhere must not offer to. */
+.popup-row-label[href]:hover,
+.popup-row-label[href]:focus-visible {
+  text-decoration: underline;
+}
+
+/* --- GROUPS --- */
+/* Carries the divider between the master row and the sections it commands. Deliberately sets no
+   display: one here would out-specify [hidden] { display: none } and this would stop hiding. */
+.popup-sections {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Shared by the category <fieldset> and the two artist <section>s. The panel around it owns the
+   spacing below, so this only resets what a fieldset brings. */
+.popup-group {
+  display: block;               /* flex on a fieldset has Chromium layout quirks */
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* --- SECTIONS --- */
+.popup-section {
+  margin: 0 0 2px;
+}
+
+/* Drops the margin, size and weight a bare <h2> brings; the button inside does the layout. */
+.popup-section-heading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* A full-width band, so it takes the row geometry rather than the .popup-button geometry. */
+.popup-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+
+  background-color: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+/* 0.05 for anything spanning the popup, 0.1 for controls the size of their own glyph. */
+.popup-section-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+/* Two borders on a square box rather than a text arrow, whose baseline drifts between platforms. */
+.popup-section-caret {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);    /* points right while collapsed */
+  transition: transform 120ms ease;
+}
+
+.popup-section-toggle[aria-expanded="true"] .popup-section-caret {
+  transform: rotate(45deg);     /* points down while expanded */
+}
+
+.popup-section-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popup-section-count {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* Like .popup-sections, deliberately without a display of its own. */
+.popup-section-panel {
+  padding: 2px 0 8px;
+}
+
+/* --- ARTIST LISTS --- */
+/* Chrome caps a popup near 600px tall, and this one already spends roughly 250px on the header,
+   master row and three section headers. 260px is seven rows - deep enough to be worth scrolling,
+   short enough that the list, Clear history and an error line all stay under the cap. */
+.popup-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Chrome's default scrollbar is a light-grey slab that reads as a bright seam against the
+   #030303 body. scrollbar-width / scrollbar-color are deliberately NOT set alongside these:
+   from Chrome 121 the standard properties win and switch the pseudo-elements off entirely. */
+.popup-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.popup-list::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* background-clip keeps the transparent border as inset padding, so the thumb reads as a 4px
+   pill floating clear of the rows rather than an 8px bar butted against them. */
+.popup-list::-webkit-scrollbar-thumb {
+  background-clip: padding-box;
+  background-color: rgba(255, 255, 255, 0.2);
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+
+.popup-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+/* An artist row is not itself a control - only its name link and trailing button are. The link
+   needs no cursor rule: the UA's pointer wins over this on any anchor with an href, and a name
+   without one correctly keeps the default. */
+.popup-list .popup-row {
+  cursor: default;
+}
+
+.popup-empty,
+.popup-error {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.popup-empty {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.popup-error {
+  margin-top: 8px;
+  color: rgba(255, 138, 128, 0.95);
+}
+
+.popup-row-action {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+
+  background-color: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.popup-button {
+  width: 100%;
+  min-height: 28px;
+  margin-top: 8px;
+
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.popup-row-action:hover,
+.popup-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* The popup is dark-only, and the UA focus ring is not reliably visible on it. */
+.popup-section-toggle:focus-visible,
+.popup-row-label[href]:focus-visible,
+.popup-row-action:focus-visible,
+.popup-button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* --- SWITCH --- */
+/* Styling the checkbox itself rather than hiding it behind a span keeps native
+   focusability and the native focus ring - hiding the input with display:none is the
+   classic way to silently break keyboard operation. */
+.popup-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0 0 0 auto;
+  appearance: none;
+
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  cursor: inherit;
+  transition: background-color 120ms ease;
+}
+
+.popup-switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 120ms ease;
+}
+
+.popup-switch:checked {
+  background-color: rgba(255, 0, 51, 0.9);   /* YouTube Music logo red (#f03) */
+}
+
+.popup-switch:checked::before {
+  transform: translateX(14px);
+}
+
+.popup-switch:focus-visible {
+  outline: 2px solid #ffffff;   /* appearance:none discards the UA ring, and it must show on black */
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-switch,
+  .popup-switch::before,
+  .popup-section-caret {
+    transition: none;
+  }
+}
